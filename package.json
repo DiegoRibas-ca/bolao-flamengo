@@ -5,7 +5,9 @@
   "main": "index.html",
   "scripts": {
     "dev": "npx http-server -p 8080 -o",
-    "build": "echo 'No build step needed for vanilla JS'"
+    "build": "node generate-config.js",
+    "config": "node generate-config.js",
+    "setup": "node generate-config.js && echo '✅ Configuração gerada! Execute npm run dev para iniciar o servidor.'"
   },
   "keywords": [
     "bolao",
@@ -18,6 +20,7 @@
     "http-server": "^14.1.1"
   },
   "dependencies": {
-    "firebase": "^12.7.0"
+    "firebase": "^12.7.0",
+    "bcryptjs": "^2.4.3"
   }
 }

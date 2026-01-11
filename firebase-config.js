@@ -1,7 +1,6 @@
 // Firebase Configuration
-// Este arquivo contém as credenciais do Firebase
-// IMPORTANTE: As credenciais do Firebase são SEGURAS para serem públicas em apps web
-// A segurança vem das REGRAS DO FIRESTORE, não das credenciais
+// Este arquivo é gerado automaticamente a partir do .env
+// NÃO edite este arquivo manualmente - execute: node generate-config.js
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBn6y2aMCrpPcAjN9zEkWpqhVc5uI3qSj8",

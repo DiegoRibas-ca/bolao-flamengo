@@ -1,9 +1,21 @@
 node_modules/
 .DS_Store
 *.log
+
+# Environment variables
 .env
+
+# Generated config files (contém secrets)
+firebase-config.js
 firebase-config.json
 
-# Opcional: Se quiser manter as credenciais privadas no git
-# Descomente a linha abaixo (mas lembre-se: as credenciais são seguras para serem públicas)
-# firebase-config.js
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

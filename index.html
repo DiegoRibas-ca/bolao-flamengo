@@ -6,6 +6,49 @@
     <title>Bolão Flamengo 2026</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Choices.js para select com busca -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+    <!-- bcryptjs para hash de senhas -->
+    <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+    <script>
+        // Garantir que bcryptjs esteja disponível globalmente
+        // O CDN do bcryptjs pode expor de diferentes formas
+        (function() {
+            // Aguardar um pouco para garantir que o script foi carregado
+            setTimeout(function() {
+                let bcryptLib = null;
+                
+                // Tentar diferentes formas de acesso
+                if (typeof bcrypt !== 'undefined') {
+                    bcryptLib = bcrypt;
+                } else if (typeof window !== 'undefined' && window.bcrypt) {
+                    bcryptLib = window.bcrypt;
+                } else if (typeof dcodeIO !== 'undefined' && dcodeIO.bcrypt) {
+                    bcryptLib = dcodeIO.bcrypt;
+                } else if (typeof window !== 'undefined' && window.dcodeIO && window.dcodeIO.bcrypt) {
+                    bcryptLib = window.dcodeIO.bcrypt;
+                }
+                
+                // Garantir que está em window.bcrypt
+                if (bcryptLib) {
+                    window.bcrypt = bcryptLib;
+                    console.log('✅ bcryptjs carregado com sucesso');
+                    
+                    // Teste rápido
+                    try {
+                        const testHash = bcryptLib.hashSync('test', 10);
+                        const testResult = bcryptLib.compareSync('test', testHash);
+                        console.log('✅ Teste de bcryptjs:', testResult ? 'OK' : 'FALHOU');
+                    } catch (e) {
+                        console.error('❌ Erro no teste de bcryptjs:', e);
+                    }
+                } else {
+                    console.error('❌ bcryptjs não foi carregado corretamente!');
+                }
+            }, 100);
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -23,6 +66,7 @@
                 <button class="nav-btn active" data-view="ranking">Classificação</button>
                 <button class="nav-btn" data-view="games">Jogos</button>
                 <button class="nav-btn" data-view="my-bets" id="my-bets-nav" style="display: none;">Meus Palpites</button>
+                <button class="nav-btn" data-view="profile" id="profile-nav" style="display: none;">Perfil</button>
                 <button class="nav-btn" data-view="admin" id="admin-nav" style="display: none;">Admin</button>
             </nav>
             <div id="user-section">
@@ -100,6 +144,38 @@
                 </div>
             </div>
 
+            <!-- View: Perfil -->
+            <div id="profile-view" class="view">
+                <div class="view-background"></div>
+                <div class="view-content">
+                    <div class="view-header">
+                        <h2>Meu Perfil</h2>
+                    </div>
+                    <div class="profile-container">
+                        <div class="profile-card">
+                            <div class="profile-info">
+                                <h3>Informações do Usuário</h3>
+                                <div class="profile-field">
+                                    <label>Nome:</label>
+                                    <span id="profile-name"></span>
+                                </div>
+                                <div class="profile-field">
+                                    <label>Email:</label>
+                                    <span id="profile-email"></span>
+                                </div>
+                                <div class="profile-field">
+                                    <label>Tipo de Conta:</label>
+                                    <span id="profile-role"></span>
+                                </div>
+                            </div>
+                            <div class="profile-actions">
+                                <button id="change-password-btn" class="btn btn-primary">Alterar Senha</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- View: Admin -->
             <div id="admin-view" class="view">
                 <h2>Painel Administrativo</h2>
@@ -109,6 +185,7 @@
                     <button class="admin-tab" data-tab="games">Jogos</button>
                     <button class="admin-tab" data-tab="players">Elenco</button>
                     <button class="admin-tab" data-tab="invites">Convites</button>
+                    <button class="admin-tab" data-tab="users">Usuários</button>
                 </div>
 
                 <!-- Tab: Configurações -->
@@ -189,6 +266,13 @@
                         <button id="send-invite-btn" class="btn btn-primary">Enviar Convite</button>
                     </div>
                     <div id="invites-list"></div>
+                </div>
+
+                <!-- Tab: Usuários -->
+                <div id="users-tab" class="admin-tab-content">
+                    <h3>Gerenciar Usuários</h3>
+                    <p class="help-text">Visualize e gerencie todos os usuários do sistema. Você pode resetar senhas caso necessário.</p>
+                    <div id="users-list"></div>
                 </div>
             </div>
         </main>
@@ -338,6 +422,39 @@
                         <p>📊 Aguardando dados suficientes</p>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Alterar Senha -->
+    <div id="change-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Alterar Senha</h2>
+            <p class="help-text">Digite sua senha atual e a nova senha desejada.</p>
+            <input type="password" id="current-password" placeholder="Senha atual" required>
+            <input type="password" id="new-password" placeholder="Nova senha" required>
+            <input type="password" id="confirm-password" placeholder="Confirmar nova senha" required>
+            <p id="change-password-error" class="error-message" style="display: none;"></p>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="submit-change-password" class="btn btn-primary">Alterar Senha</button>
+                <button id="cancel-change-password" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Resetar Senha (Admin) -->
+    <div id="reset-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="reset-password-title">Resetar Senha</h2>
+            <p class="help-text" id="reset-password-info"></p>
+            <input type="password" id="reset-password-new" placeholder="Nova senha temporária" required>
+            <input type="password" id="reset-password-confirm" placeholder="Confirmar nova senha" required>
+            <p id="reset-password-error" class="error-message" style="display: none;"></p>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="submit-reset-password" class="btn btn-primary">Resetar Senha</button>
+                <button id="cancel-reset-password" class="btn btn-secondary">Cancelar</button>
             </div>
         </div>
     </div>

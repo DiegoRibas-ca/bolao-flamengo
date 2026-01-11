@@ -1,3 +1,34 @@
+// Helper para obter bcryptjs
+function getBcrypt() {
+    // bcryptjs pode estar em diferentes lugares dependendo de como foi carregado
+    // Quando carregado via CDN, geralmente está disponível como 'bcrypt' globalmente
+    
+    // Debug: verificar o que está disponível
+    console.log('[getBcrypt] Verificando disponibilidade do bcryptjs...');
+    console.log('[getBcrypt] typeof window:', typeof window);
+    console.log('[getBcrypt] window.bcrypt:', typeof window !== 'undefined' ? typeof window.bcrypt : 'N/A');
+    console.log('[getBcrypt] typeof bcrypt:', typeof bcrypt);
+    console.log('[getBcrypt] window.dcodeIO:', typeof window !== 'undefined' && window.dcodeIO ? typeof window.dcodeIO.bcrypt : 'N/A');
+    
+    if (typeof window !== 'undefined' && window.bcrypt) {
+        console.log('[getBcrypt] Usando window.bcrypt');
+        return window.bcrypt;
+    }
+    // Tentar acessar diretamente (pode estar no escopo global)
+    if (typeof bcrypt !== 'undefined') {
+        console.log('[getBcrypt] Usando bcrypt global');
+        return bcrypt;
+    }
+    // Se ainda não encontrou, tentar acessar via dcodeIO (algumas versões do bcryptjs)
+    if (typeof window !== 'undefined' && window.dcodeIO && window.dcodeIO.bcrypt) {
+        console.log('[getBcrypt] Usando window.dcodeIO.bcrypt');
+        return window.dcodeIO.bcrypt;
+    }
+    
+    console.error('[getBcrypt] bcryptjs não encontrado!');
+    throw new Error('bcryptjs não está disponível. Verifique se o CDN foi carregado no index.html');
+}
+
 // Estado da aplicação
 let currentUser = null;
 let currentGameId = null;
@@ -304,6 +335,29 @@ function setupEventListeners() {
     // Bet
     document.getElementById('submit-bet')?.addEventListener('click', submitBet);
     document.getElementById('add-scorer-btn')?.addEventListener('click', addScorerInput);
+    
+    // Profile
+    document.getElementById('change-password-btn')?.addEventListener('click', () => {
+        document.getElementById('change-password-modal').style.display = 'block';
+    });
+    document.getElementById('submit-change-password')?.addEventListener('click', changePassword);
+    document.getElementById('cancel-change-password')?.addEventListener('click', () => {
+        document.getElementById('change-password-modal').style.display = 'none';
+        document.getElementById('current-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+        document.getElementById('change-password-error').style.display = 'none';
+    });
+    
+    // Admin - Reset Password
+    document.getElementById('submit-reset-password')?.addEventListener('click', resetUserPassword);
+    document.getElementById('cancel-reset-password')?.addEventListener('click', () => {
+        document.getElementById('reset-password-modal').style.display = 'none';
+        document.getElementById('reset-password-new').value = '';
+        document.getElementById('reset-password-confirm').value = '';
+        document.getElementById('reset-password-error').style.display = 'none';
+        window.resetPasswordUserId = null;
+    });
 }
 
 function switchView(viewName) {
@@ -323,6 +377,8 @@ function switchView(viewName) {
     } else if (viewName === 'my-bets' && currentUser) {
         loadUserBets();
         renderBets();
+    } else if (viewName === 'profile' && currentUser) {
+        renderProfile();
     } else if (viewName === 'admin' && currentUser?.isAdmin) {
         loadAdminData();
     }
@@ -343,6 +399,8 @@ function switchAdminTab(tabName) {
         renderPlayers();
     } else if (tabName === 'invites') {
         loadInvites();
+    } else if (tabName === 'users') {
+        loadUsers();
     }
 }
 
@@ -372,8 +430,63 @@ async function handleLogin() {
         const userDoc = snapshot.docs[0];
         const userData = userDoc.data();
 
-        // Verificar senha (em produção, use hash)
-        if (userData.password !== password) {
+        // Verificar senha usando bcrypt
+        let passwordValid = false;
+        if (userData.password) {
+            try {
+                const bcryptLib = getBcrypt();
+                console.log('[Login] bcryptjs encontrado:', !!bcryptLib);
+                console.log('[Login] Tipo de senha no DB:', userData.password.startsWith('$2a$') || userData.password.startsWith('$2b$') ? 'hash' : 'texto plano');
+                console.log('[Login] Primeiros caracteres do hash:', userData.password.substring(0, 20));
+                
+                // Verificar se a senha está em hash (começa com $2a$ ou $2b$)
+                if (userData.password.startsWith('$2a$') || userData.password.startsWith('$2b$')) {
+                    // Senha está em hash, comparar usando bcrypt
+                    console.log('[Login] Comparando senha com hash...');
+                    passwordValid = bcryptLib.compareSync(password, userData.password);
+                    console.log('[Login] Resultado da comparação:', passwordValid);
+                    
+                    if (!passwordValid) {
+                        console.warn('[Login] Senha não corresponde ao hash. Verificando se bcrypt está funcionando...');
+                        // Teste de diagnóstico
+                        const testHash = bcryptLib.hashSync('test', 10);
+                        const testCompare = bcryptLib.compareSync('test', testHash);
+                        console.log('[Login] Teste de bcrypt:', testCompare ? 'OK' : 'FALHOU');
+                    }
+                } else {
+                    // Senha antiga em texto plano (migração gradual)
+                    // Comparar diretamente e, se válida, atualizar para hash
+                    console.log('[Login] Senha em texto plano, comparando diretamente...');
+                    if (userData.password === password) {
+                        passwordValid = true;
+                        console.log('[Login] Senha correta, migrando para hash...');
+                        // Atualizar para hash (opcional, pode fazer em background)
+                        try {
+                            const hashedPassword = bcryptLib.hashSync(password, 10);
+                            const { setDoc, doc } = window.firebaseFunctions;
+                            await setDoc(doc(db, 'users', userDoc.id), {
+                                password: hashedPassword
+                            }, { merge: true });
+                            console.log('[Login] Senha migrada para hash com sucesso');
+                        } catch (error) {
+                            console.error('Erro ao atualizar senha para hash:', error);
+                        }
+                    } else {
+                        console.log('[Login] Senha em texto plano não corresponde');
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao verificar senha:', error);
+                console.error('Stack trace:', error.stack);
+                errorEl.textContent = 'Erro de configuração. Recarregue a página.';
+                errorEl.style.display = 'block';
+                return;
+            }
+        } else {
+            console.warn('[Login] Usuário não tem senha definida');
+        }
+        
+        if (!passwordValid) {
             errorEl.textContent = 'Senha incorreta';
             errorEl.style.display = 'block';
             return;
@@ -451,6 +564,7 @@ function updateUserUI() {
     const loginBtn = document.getElementById('login-btn');
     const userInfo = document.getElementById('user-info');
     const myBetsNav = document.getElementById('my-bets-nav');
+    const profileNav = document.getElementById('profile-nav');
     const adminNav = document.getElementById('admin-nav');
 
     if (currentUser) {
@@ -458,14 +572,21 @@ function updateUserUI() {
         userInfo.style.display = 'flex';
         document.getElementById('user-name').textContent = currentUser.name;
         myBetsNav.style.display = 'block';
+        profileNav.style.display = 'block';
         
         if (currentUser.isAdmin) {
             adminNav.style.display = 'block';
+        }
+        
+        // Atualizar informações do perfil se estiver na view de perfil
+        if (document.getElementById('profile-view')?.classList.contains('active')) {
+            renderProfile();
         }
     } else {
         loginBtn.style.display = 'block';
         userInfo.style.display = 'none';
         myBetsNav.style.display = 'none';
+        profileNav.style.display = 'none';
         adminNav.style.display = 'none';
     }
 }
@@ -548,7 +669,7 @@ function updateChampionshipFilters() {
     }
 }
 
-function renderGames() {
+async function renderGames() {
     const container = document.getElementById('games-list');
     
     // Verificar duplicatas antes de filtrar
@@ -589,6 +710,29 @@ function renderGames() {
     
     console.log(`[renderGames] Renderizando ${uniqueFilteredGames.length} jogos únicos`);
 
+    // Buscar todos os palpites de jogos que estão ao vivo ou finalizados
+    const liveOrFinishedGames = uniqueFilteredGames.filter(g => g.status === 'live' || g.status === 'finished');
+    const allBetsMap = {}; // Mapa: gameId -> array de palpites
+    
+    if (liveOrFinishedGames.length > 0 && db) {
+        try {
+            const { collection, getDocs } = window.firebaseFunctions;
+            // Buscar todos os palpites de uma vez
+            const allBetsSnapshot = await getDocs(collection(db, 'bets'));
+            const allBetsData = allBetsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            // Agrupar palpites por gameId
+            liveOrFinishedGames.forEach(game => {
+                allBetsMap[game.id] = allBetsData.filter(b => b.gameId === game.id);
+            });
+        } catch (error) {
+            console.error('Erro ao buscar palpites:', error);
+        }
+    }
+
     container.innerHTML = uniqueFilteredGames.map(game => {
         const champ = championships.find(c => c.id === game.championship);
         const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
@@ -611,7 +755,12 @@ function renderGames() {
         const canEditBet = currentUser && game.status === 'upcoming' && !(game.status === 'live' || game.status === 'finished');
         const canMakeBet = currentUser && game.status === 'upcoming' && !userBet;
 
-        // Formatar marcadores do palpite
+        // Buscar todos os palpites deste jogo se estiver ao vivo ou finalizado
+        const allGameBets = (game.status === 'live' || game.status === 'finished') 
+            ? (allBetsMap[game.id] || [])
+            : [];
+
+        // Formatar marcadores do palpite do usuário
         let betScorersText = '';
         if (userBet && userBet.scorers && userBet.scorers.length > 0) {
             const scorerNames = userBet.scorers.map(sId => {
@@ -620,6 +769,15 @@ function renderGames() {
             });
             betScorersText = scorerNames.join(', ');
         }
+
+        // Função helper para formatar marcadores de qualquer palpite
+        const formatScorers = (scorers) => {
+            if (!scorers || scorers.length === 0) return '';
+            return scorers.map(sId => {
+                const player = players.find(p => p.id === sId);
+                return player ? (player.abbreviation || player.name) : '?';
+            }).join(', ');
+        };
 
         return `
             <div class="game-card">
@@ -653,27 +811,101 @@ function renderGames() {
                     </div>
                 </div>
 
-                ${currentUser ? `
-                    <div class="game-bet-display ${userBet ? 'has-bet' : 'no-bet'}">
-                        ${userBet ? `
-                            <div class="game-bet-header">
-                                <span class="game-bet-label">🎯 Seu Palpite:</span>
-                                <span class="game-bet-score">${userBet.flamengoScore} x ${userBet.opponentScore}</span>
-                            </div>
-                            ${betScorersText ? `
-                                <div class="game-bet-scorers">
-                                    <span class="game-bet-scorers-label">Marcadores:</span>
-                                    <span class="game-bet-scorers-value">${betScorersText}</span>
+                ${game.status === 'upcoming' ? `
+                    ${currentUser ? `
+                        <div class="game-bet-display ${userBet ? 'has-bet' : 'no-bet'}">
+                            ${userBet ? `
+                                <div class="game-bet-header">
+                                    <span class="game-bet-label">🎯 Seu Palpite:</span>
+                                    <span class="game-bet-score">${userBet.flamengoScore} x ${userBet.opponentScore}</span>
                                 </div>
-                            ` : ''}
+                                ${betScorersText ? `
+                                    <div class="game-bet-scorers">
+                                        <span class="game-bet-scorers-label">Marcadores:</span>
+                                        <span class="game-bet-scorers-value">${betScorersText}</span>
+                                    </div>
+                                ` : ''}
+                            ` : `
+                                <div class="game-bet-empty">
+                                    <span class="game-bet-empty-icon">📝</span>
+                                    <span class="game-bet-empty-text">Ainda não foi feito palpite para este jogo</span>
+                                </div>
+                            `}
+                        </div>
+                    ` : ''}
+                ` : `
+                    <div class="all-bets-section">
+                        <div class="all-bets-header">
+                            <h3>${game.status === 'live' ? '🔴 Palpites dos Participantes' : '📊 Palpites dos Participantes'}</h3>
+                            <span class="bets-count">${allGameBets.length} palpite${allGameBets.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        ${allGameBets.length > 0 ? `
+                            <div class="all-bets-list">
+                                ${allGameBets
+                                    .sort((a, b) => {
+                                        // Seu próprio palpite sempre primeiro
+                                        if (currentUser) {
+                                            if (a.userId === currentUser.id) return -1;
+                                            if (b.userId === currentUser.id) return 1;
+                                        }
+                                        // Se o jogo está finalizado, ordenar por pontos (mais pontos primeiro)
+                                        if (game.status === 'finished' && game.flamengoScore !== null) {
+                                            const pointsA = calculatePoints(a, game).points;
+                                            const pointsB = calculatePoints(b, game).points;
+                                            if (pointsB !== pointsA) return pointsB - pointsA;
+                                        }
+                                        // Caso contrário, ordenar por nome
+                                        const userA = users.find(u => u.id === a.userId);
+                                        const userB = users.find(u => u.id === b.userId);
+                                        const nameA = userA ? userA.name : '';
+                                        const nameB = userB ? userB.name : '';
+                                        return nameA.localeCompare(nameB);
+                                    })
+                                    .map(bet => {
+                                    const betUser = users.find(u => u.id === bet.userId);
+                                    const userName = betUser ? betUser.name : 'Participante';
+                                    const isCurrentUser = currentUser && bet.userId === currentUser.id;
+                                    const betScorers = formatScorers(bet.scorers);
+                                    
+                                    // Calcular pontos se o jogo estiver finalizado
+                                    let pointsInfo = '';
+                                    if (game.status === 'finished' && game.flamengoScore !== null) {
+                                        const result = calculatePoints(bet, game);
+                                        pointsInfo = `
+                                            <div class="bet-points ${result.points > 0 ? 'points-positive' : 'points-zero'}">
+                                                <span class="points-label">Pontos:</span>
+                                                <span class="points-value">${result.points.toFixed(1)}</span>
+                                                ${result.points > 0 ? `<span class="points-breakdown">(${result.breakdown})</span>` : ''}
+                                            </div>
+                                        `;
+                                    }
+                                    
+                                    return `
+                                        <div class="participant-bet-card ${isCurrentUser ? 'current-user-bet' : ''}">
+                                            <div class="participant-bet-header">
+                                                <span class="participant-name ${isCurrentUser ? 'you-label' : ''}">
+                                                    ${isCurrentUser ? '👤 Você' : `👤 ${userName}`}
+                                                </span>
+                                                <span class="participant-bet-score">${bet.flamengoScore} x ${bet.opponentScore}</span>
+                                            </div>
+                                            ${betScorers ? `
+                                                <div class="participant-bet-scorers">
+                                                    <span class="scorers-label">Marcadores:</span>
+                                                    <span class="scorers-value">${betScorers}</span>
+                                                </div>
+                                            ` : ''}
+                                            ${pointsInfo}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         ` : `
-                            <div class="game-bet-empty">
-                                <span class="game-bet-empty-icon">📝</span>
-                                <span class="game-bet-empty-text">Ainda não foi feito palpite para este jogo</span>
+                            <div class="no-bets-message">
+                                <p>Nenhum participante fez palpite para este jogo ainda.</p>
                             </div>
                         `}
                     </div>
-                ` : ''}
+                `}
 
                 <div class="game-actions">
                     ${canMakeBet ? `
@@ -788,45 +1020,118 @@ function openBetModal(gameId) {
     document.getElementById('bet-modal').style.display = 'block';
 }
 
+// Armazenar instâncias do Choices.js para poder destruir quando necessário
+let choicesInstances = new Map();
+
 function addScorerInput() {
     const container = document.getElementById('scorers-list');
     const scorerDiv = document.createElement('div');
     scorerDiv.className = 'scorer-item';
+    scorerDiv.setAttribute('data-scorer-id', Date.now().toString());
     
     const select = document.createElement('select');
-    select.innerHTML = '<option value="">Selecione o jogador</option>' +
+    select.className = 'player-select';
+    select.innerHTML = '<option value="">Digite para buscar jogador...</option>' +
         players.map(p => `<option value="${p.id}">${p.number ? `${p.number} - ` : ''}${p.name}${p.abbreviation ? ` (${p.abbreviation})` : ''}</option>`).join('');
     
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-danger btn-small';
     removeBtn.textContent = 'Remover';
-    removeBtn.onclick = () => scorerDiv.remove();
+    removeBtn.onclick = () => {
+        const scorerId = scorerDiv.getAttribute('data-scorer-id');
+        if (choicesInstances.has(scorerId)) {
+            choicesInstances.get(scorerId).destroy();
+            choicesInstances.delete(scorerId);
+        }
+        scorerDiv.remove();
+    };
     
     scorerDiv.appendChild(select);
     scorerDiv.appendChild(removeBtn);
     container.appendChild(scorerDiv);
+    
+    // Inicializar Choices.js após o elemento ser adicionado ao DOM
+    setTimeout(() => {
+        if (typeof Choices !== 'undefined') {
+            const scorerId = scorerDiv.getAttribute('data-scorer-id');
+            const choices = new Choices(select, {
+                searchEnabled: true,
+                searchChoices: true,
+                searchFields: ['label', 'value'],
+                placeholder: true,
+                placeholderValue: 'Digite para buscar jogador...',
+                searchPlaceholderValue: 'Buscar por nome, número ou abreviação...',
+                itemSelectText: '',
+                shouldSort: true,
+                fuseOptions: {
+                    threshold: 0.3,
+                    keys: ['label']
+                }
+            });
+            choicesInstances.set(scorerId, choices);
+        }
+    }, 100);
 }
 
 function renderScorers(scorers) {
     const container = document.getElementById('scorers-list');
     container.innerHTML = '';
     
+    // Limpar instâncias antigas
+    choicesInstances.forEach(choice => choice.destroy());
+    choicesInstances.clear();
+    
     scorers.forEach(scorerId => {
         const scorerDiv = document.createElement('div');
         scorerDiv.className = 'scorer-item';
+        scorerDiv.setAttribute('data-scorer-id', Date.now().toString() + Math.random());
         
         const select = document.createElement('select');
-        select.innerHTML = '<option value="">Selecione o jogador</option>' +
+        select.className = 'player-select';
+        select.innerHTML = '<option value="">Digite para buscar jogador...</option>' +
             players.map(p => `<option value="${p.id}" ${p.id === scorerId ? 'selected' : ''}>${p.number ? `${p.number} - ` : ''}${p.name}${p.abbreviation ? ` (${p.abbreviation})` : ''}</option>`).join('');
         
         const removeBtn = document.createElement('button');
         removeBtn.className = 'btn btn-danger btn-small';
         removeBtn.textContent = 'Remover';
-        removeBtn.onclick = () => scorerDiv.remove();
+        removeBtn.onclick = () => {
+            const scorerIdAttr = scorerDiv.getAttribute('data-scorer-id');
+            if (choicesInstances.has(scorerIdAttr)) {
+                choicesInstances.get(scorerIdAttr).destroy();
+                choicesInstances.delete(scorerIdAttr);
+            }
+            scorerDiv.remove();
+        };
         
         scorerDiv.appendChild(select);
         scorerDiv.appendChild(removeBtn);
         container.appendChild(scorerDiv);
+        
+        // Inicializar Choices.js após o elemento ser adicionado ao DOM
+        setTimeout(() => {
+            if (typeof Choices !== 'undefined') {
+                const scorerIdAttr = scorerDiv.getAttribute('data-scorer-id');
+                const choices = new Choices(select, {
+                    searchEnabled: true,
+                    searchChoices: true,
+                    searchFields: ['label', 'value'],
+                    placeholder: true,
+                    placeholderValue: 'Digite para buscar jogador...',
+                    searchPlaceholderValue: 'Buscar por nome, número ou abreviação...',
+                    itemSelectText: '',
+                    shouldSort: true,
+                    fuseOptions: {
+                        threshold: 0.3,
+                        keys: ['label']
+                    }
+                });
+                // Definir valor selecionado
+                if (scorerId) {
+                    choices.setChoiceByValue(scorerId);
+                }
+                choicesInstances.set(scorerIdAttr, choices);
+            }
+        }, 100);
     });
 }
 
@@ -839,10 +1144,17 @@ async function submitBet() {
         return;
     }
 
-    // Coletar marcadores
+    // Coletar marcadores (compatível com Choices.js)
     const scorerSelects = document.querySelectorAll('#scorers-list select');
     const scorers = Array.from(scorerSelects)
-        .map(select => select.value)
+        .map(select => {
+            // Se Choices.js está sendo usado, pegar o valor do Choices
+            const choicesInstance = Array.from(choicesInstances.values()).find(c => c.passedElement.element === select);
+            if (choicesInstance) {
+                return choicesInstance.getValue(true); // true = retorna apenas valores
+            }
+            return select.value;
+        })
         .filter(id => id);
 
     // Validar número de marcadores
@@ -979,38 +1291,50 @@ function calculatePoints(bet, game) {
 
     let points = 0;
     const breakdown = [];
+    let hasScoredMainCriteria = false; // Flag para indicar se já pontuou por um dos 3 critérios principais
 
-    // 1. Cravar resultado (placar exato)
+    // 1. Cravar resultado (placar exato) - PRIORIDADE MÁXIMA
+    // Se acertou o placar exato, NÃO pode pontuar por resultado ou gols de um time
     if (bet.flamengoScore === game.flamengoScore && bet.opponentScore === game.opponentScore) {
         points += weights.exactScore * champWeight;
         breakdown.push('Placar exato');
+        hasScoredMainCriteria = true; // Já pontuou, não pode pontuar pelos outros critérios
     }
 
     // 2. Acertar resultado (vitória/empate/derrota)
-    const betResult = bet.flamengoScore > bet.opponentScore ? 'win' : 
-                     bet.flamengoScore < bet.opponentScore ? 'loss' : 'draw';
-    const gameResult = game.flamengoScore > game.opponentScore ? 'win' : 
-                      game.flamengoScore < game.opponentScore ? 'loss' : 'draw';
-    
-    if (betResult === gameResult && points === 0) {
-        points += weights.correctResult * champWeight;
-        breakdown.push('Resultado');
+    // Só pontua se NÃO acertou placar exato
+    if (!hasScoredMainCriteria) {
+        const betResult = bet.flamengoScore > bet.opponentScore ? 'win' : 
+                         bet.flamengoScore < bet.opponentScore ? 'loss' : 'draw';
+        const gameResult = game.flamengoScore > game.opponentScore ? 'win' : 
+                          game.flamengoScore < game.opponentScore ? 'loss' : 'draw';
+        
+        if (betResult === gameResult) {
+            points += weights.correctResult * champWeight;
+            breakdown.push('Resultado');
+            hasScoredMainCriteria = true; // Já pontuou, não pode pontuar por gols de um time
+        }
     }
 
-    // 3. Acertar número de gols de um dos times (só se não acertou placar exato ou resultado)
-    let goalsPoints = 0;
-    if (bet.flamengoScore === game.flamengoScore) {
-        goalsPoints += weights.correctGoals * champWeight;
-    }
-    if (bet.opponentScore === game.opponentScore) {
-        goalsPoints += weights.correctGoals * champWeight;
-    }
-    if (goalsPoints > 0 && points === 0) { // Só se não acertou placar exato ou resultado
-        points += goalsPoints;
-        breakdown.push('Gols');
+    // 3. Acertar número de gols de um dos times
+    // Só pontua se NÃO acertou placar exato E NÃO acertou resultado
+    if (!hasScoredMainCriteria) {
+        let goalsPoints = 0;
+        if (bet.flamengoScore === game.flamengoScore) {
+            goalsPoints += weights.correctGoals * champWeight;
+        }
+        if (bet.opponentScore === game.opponentScore) {
+            goalsPoints += weights.correctGoals * champWeight;
+        }
+        if (goalsPoints > 0) {
+            points += goalsPoints;
+            breakdown.push('Gols de um time');
+            hasScoredMainCriteria = true;
+        }
     }
 
-    // 4. Acertar marcadores (só se o jogo tiver marcadores registrados)
+    // 4. Acertar marcadores - SEMPRE CUMULATIVO (pode somar com qualquer um dos 3 critérios acima)
+    // Pontuação por marcadores é independente e sempre somada
     if (game.scorers && game.scorers.length > 0 && bet.scorers && bet.scorers.length > 0) {
         const correctScorers = bet.scorers.filter(sId => game.scorers.includes(sId)).length;
         if (correctScorers > 0) {
@@ -1590,7 +1914,7 @@ function renderParticipantBreakdownChart(userId, userBets, finishedGames) {
             breakdownParts.forEach(type => {
                 if (type.includes('Placar exato')) breakdown['Placar Exato']++;
                 else if (type.includes('Resultado')) breakdown['Resultado']++;
-                else if (type.includes('Gols')) breakdown['Gols de um Time']++;
+                else if (type.includes('Gols de um time')) breakdown['Gols de um Time']++;
                 else if (type.includes('marcador')) breakdown['Marcadores']++;
             });
         }
@@ -1658,7 +1982,10 @@ function renderConfig() {
         <div class="config-section">
             <h3>⚙️ Configurações Gerais</h3>
             <div class="config-item">
-                <label>Máximo de gols por palpite:</label>
+                <label>
+                    <strong>Máximo de gols por time</strong><br>
+                    <small>Limite de gols de um dos times (não o somatório da partida)</small>
+                </label>
                 <input type="number" id="config-max-goals" value="${config.maxGoals}" min="5" max="50">
             </div>
         </div>
@@ -1830,45 +2157,118 @@ function openGameModal(gameId = null) {
     document.getElementById('game-modal').style.display = 'block';
 }
 
+// Armazenar instâncias do Choices.js para marcadores de jogos
+let gameChoicesInstances = new Map();
+
 function addGameScorerInput() {
     const container = document.getElementById('game-scorers-list');
     const scorerDiv = document.createElement('div');
     scorerDiv.className = 'scorer-item';
+    scorerDiv.setAttribute('data-game-scorer-id', Date.now().toString());
     
     const select = document.createElement('select');
-    select.innerHTML = '<option value="">Selecione o jogador</option>' +
+    select.className = 'player-select';
+    select.innerHTML = '<option value="">Digite para buscar jogador...</option>' +
         players.map(p => `<option value="${p.id}">${p.number ? `${p.number} - ` : ''}${p.name}${p.abbreviation ? ` (${p.abbreviation})` : ''}</option>`).join('');
     
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-danger btn-small';
     removeBtn.textContent = 'Remover';
-    removeBtn.onclick = () => scorerDiv.remove();
+    removeBtn.onclick = () => {
+        const scorerId = scorerDiv.getAttribute('data-game-scorer-id');
+        if (gameChoicesInstances.has(scorerId)) {
+            gameChoicesInstances.get(scorerId).destroy();
+            gameChoicesInstances.delete(scorerId);
+        }
+        scorerDiv.remove();
+    };
     
     scorerDiv.appendChild(select);
     scorerDiv.appendChild(removeBtn);
     container.appendChild(scorerDiv);
+    
+    // Inicializar Choices.js após o elemento ser adicionado ao DOM
+    setTimeout(() => {
+        if (typeof Choices !== 'undefined') {
+            const scorerId = scorerDiv.getAttribute('data-game-scorer-id');
+            const choices = new Choices(select, {
+                searchEnabled: true,
+                searchChoices: true,
+                searchFields: ['label', 'value'],
+                placeholder: true,
+                placeholderValue: 'Digite para buscar jogador...',
+                searchPlaceholderValue: 'Buscar por nome, número ou abreviação...',
+                itemSelectText: '',
+                shouldSort: true,
+                fuseOptions: {
+                    threshold: 0.3,
+                    keys: ['label']
+                }
+            });
+            gameChoicesInstances.set(scorerId, choices);
+        }
+    }, 100);
 }
 
 function renderGameScorers(scorers) {
     const container = document.getElementById('game-scorers-list');
     container.innerHTML = '';
     
+    // Limpar instâncias antigas
+    gameChoicesInstances.forEach(choice => choice.destroy());
+    gameChoicesInstances.clear();
+    
     scorers.forEach(scorerId => {
         const scorerDiv = document.createElement('div');
         scorerDiv.className = 'scorer-item';
+        scorerDiv.setAttribute('data-game-scorer-id', Date.now().toString() + Math.random());
         
         const select = document.createElement('select');
-        select.innerHTML = '<option value="">Selecione o jogador</option>' +
+        select.className = 'player-select';
+        select.innerHTML = '<option value="">Digite para buscar jogador...</option>' +
             players.map(p => `<option value="${p.id}" ${p.id === scorerId ? 'selected' : ''}>${p.number ? `${p.number} - ` : ''}${p.name}${p.abbreviation ? ` (${p.abbreviation})` : ''}</option>`).join('');
         
         const removeBtn = document.createElement('button');
         removeBtn.className = 'btn btn-danger btn-small';
         removeBtn.textContent = 'Remover';
-        removeBtn.onclick = () => scorerDiv.remove();
+        removeBtn.onclick = () => {
+            const scorerIdAttr = scorerDiv.getAttribute('data-game-scorer-id');
+            if (gameChoicesInstances.has(scorerIdAttr)) {
+                gameChoicesInstances.get(scorerIdAttr).destroy();
+                gameChoicesInstances.delete(scorerIdAttr);
+            }
+            scorerDiv.remove();
+        };
         
         scorerDiv.appendChild(select);
         scorerDiv.appendChild(removeBtn);
         container.appendChild(scorerDiv);
+        
+        // Inicializar Choices.js após o elemento ser adicionado ao DOM
+        setTimeout(() => {
+            if (typeof Choices !== 'undefined') {
+                const scorerIdAttr = scorerDiv.getAttribute('data-game-scorer-id');
+                const choices = new Choices(select, {
+                    searchEnabled: true,
+                    searchChoices: true,
+                    searchFields: ['label', 'value'],
+                    placeholder: true,
+                    placeholderValue: 'Digite para buscar jogador...',
+                    searchPlaceholderValue: 'Buscar por nome, número ou abreviação...',
+                    itemSelectText: '',
+                    shouldSort: true,
+                    fuseOptions: {
+                        threshold: 0.3,
+                        keys: ['label']
+                    }
+                });
+                // Definir valor selecionado
+                if (scorerId) {
+                    choices.setChoiceByValue(scorerId);
+                }
+                gameChoicesInstances.set(scorerIdAttr, choices);
+            }
+        }, 100);
     });
 }
 
@@ -1896,10 +2296,17 @@ async function saveGame() {
         return;
     }
 
-    // Coletar marcadores de gols
+    // Coletar marcadores de gols (compatível com Choices.js)
     const scorerSelects = document.querySelectorAll('#game-scorers-list select');
     const scorers = Array.from(scorerSelects)
-        .map(select => select.value)
+        .map(select => {
+            // Se Choices.js está sendo usado, pegar o valor do Choices
+            const choicesInstance = Array.from(gameChoicesInstances.values()).find(c => c.passedElement.element === select);
+            if (choicesInstance) {
+                return choicesInstance.getValue(true); // true = retorna apenas valores
+            }
+            return select.value;
+        })
         .filter(id => id);
 
     // Validar número de marcadores
@@ -2105,10 +2512,21 @@ async function sendInvite() {
         return;
     }
 
+    // Hash da senha usando bcrypt
+    let hashedPassword;
+    try {
+        const bcryptLib = getBcrypt();
+        hashedPassword = bcryptLib.hashSync(password, 10);
+    } catch (error) {
+        console.error('Erro ao fazer hash da senha:', error);
+        alert('Erro ao processar senha. Verifique se bcryptjs foi carregado e recarregue a página.');
+        return;
+    }
+
     const userData = {
         email: email,
         name: name,
-        password: password, // Em produção, usar hash
+        password: hashedPassword, // Senha em hash
         isAdmin: role === 'admin',
         invited: true,
         acceptedAt: null, // Será preenchido quando o usuário fizer login pela primeira vez
@@ -3126,6 +3544,228 @@ function initBannerAnimation() {
     };
 }
 
+// Funções de Perfil
+function renderProfile() {
+    if (!currentUser) return;
+    
+    document.getElementById('profile-name').textContent = currentUser.name || 'N/A';
+    document.getElementById('profile-email').textContent = currentUser.email || 'N/A';
+    document.getElementById('profile-role').textContent = currentUser.isAdmin ? '👑 Administrador' : '👤 Participante';
+}
+
+async function changePassword() {
+    if (!currentUser || !db) {
+        alert('Erro: usuário não autenticado');
+        return;
+    }
+    
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const errorEl = document.getElementById('change-password-error');
+    
+    // Validações
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        errorEl.textContent = 'Preencha todos os campos';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        errorEl.textContent = 'As senhas não coincidem';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (newPassword.length < 4) {
+        errorEl.textContent = 'A nova senha deve ter pelo menos 4 caracteres';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    try {
+        const { collection, getDocs, query, where, setDoc, doc } = window.firebaseFunctions;
+        
+        // Buscar usuário atual no Firestore para verificar senha atual
+        const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', currentUser.email)));
+        if (userDoc.empty) {
+            errorEl.textContent = 'Usuário não encontrado';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        const userData = userDoc.docs[0].data();
+        const userId = userDoc.docs[0].id;
+        
+        // Verificar senha atual
+        const bcryptLib = getBcrypt();
+        let passwordValid = false;
+        
+        if (userData.password) {
+            if (userData.password.startsWith('$2a$') || userData.password.startsWith('$2b$')) {
+                passwordValid = bcryptLib.compareSync(currentPassword, userData.password);
+            } else {
+                // Senha antiga em texto plano
+                passwordValid = userData.password === currentPassword;
+            }
+        }
+        
+        if (!passwordValid) {
+            errorEl.textContent = 'Senha atual incorreta';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        // Hash da nova senha
+        const hashedPassword = bcryptLib.hashSync(newPassword, 10);
+        
+        // Atualizar senha no Firestore
+        await setDoc(doc(db, 'users', userId), {
+            password: hashedPassword
+        }, { merge: true });
+        
+        alert('✅ Senha alterada com sucesso!');
+        document.getElementById('change-password-modal').style.display = 'none';
+        document.getElementById('current-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+        errorEl.style.display = 'none';
+        
+    } catch (error) {
+        console.error('Erro ao alterar senha:', error);
+        errorEl.textContent = 'Erro ao alterar senha. Tente novamente.';
+        errorEl.style.display = 'block';
+    }
+}
+
+// Funções de Admin - Gerenciar Usuários
+async function loadUsers() {
+    if (!db || !currentUser?.isAdmin) return;
+    
+    try {
+        const { collection, getDocs } = window.firebaseFunctions;
+        const snapshot = await getDocs(collection(db, 'users'));
+        
+        const usersList = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        // Ordenar: admins primeiro, depois por nome
+        usersList.sort((a, b) => {
+            if (a.isAdmin && !b.isAdmin) return -1;
+            if (!a.isAdmin && b.isAdmin) return 1;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+        
+        const container = document.getElementById('users-list');
+        if (usersList.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Nenhum usuário encontrado.</p>';
+            return;
+        }
+        
+        container.innerHTML = usersList.map(user => {
+            const roleBadge = user.isAdmin 
+                ? '<span class="role-badge admin-badge">👑 Admin</span>' 
+                : '<span class="role-badge participant-badge">👤 Participante</span>';
+            
+            const acceptedBadge = user.acceptedAt 
+                ? `<span class="status-badge accepted-badge">✅ Aceito</span>` 
+                : '<span class="status-badge pending-badge">⏳ Pendente</span>';
+            
+            return `
+                <div class="invite-card ${user.acceptedAt ? 'accepted' : 'pending'}" style="margin-bottom: 15px;">
+                    <div class="invite-card-content">
+                        <div class="invite-card-header">
+                            <strong>${user.name || 'Sem nome'}</strong>
+                            ${roleBadge}
+                        </div>
+                        <div class="invite-card-body">
+                            <small class="invite-email">${user.email || 'Sem email'}</small>
+                            ${acceptedBadge}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button class="btn btn-secondary btn-small" onclick="window.openResetPasswordModal('${user.id}', '${user.name || user.email}')">
+                                🔑 Resetar Senha
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+        document.getElementById('users-list').innerHTML = '<p style="color: red;">Erro ao carregar usuários.</p>';
+    }
+}
+
+window.resetPasswordUserId = null;
+
+function openResetPasswordModal(userId, userName) {
+    window.resetPasswordUserId = userId;
+    document.getElementById('reset-password-title').textContent = `Resetar Senha - ${userName}`;
+    document.getElementById('reset-password-info').textContent = `Defina uma nova senha temporária para ${userName}. O usuário poderá alterá-la depois no seu perfil.`;
+    document.getElementById('reset-password-new').value = '';
+    document.getElementById('reset-password-confirm').value = '';
+    document.getElementById('reset-password-error').style.display = 'none';
+    document.getElementById('reset-password-modal').style.display = 'block';
+}
+
+async function resetUserPassword() {
+    if (!currentUser?.isAdmin || !db || !window.resetPasswordUserId) {
+        alert('Erro: operação não autorizada');
+        return;
+    }
+    
+    const newPassword = document.getElementById('reset-password-new').value;
+    const confirmPassword = document.getElementById('reset-password-confirm').value;
+    const errorEl = document.getElementById('reset-password-error');
+    
+    // Validações
+    if (!newPassword || !confirmPassword) {
+        errorEl.textContent = 'Preencha todos os campos';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        errorEl.textContent = 'As senhas não coincidem';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (newPassword.length < 4) {
+        errorEl.textContent = 'A senha deve ter pelo menos 4 caracteres';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    try {
+        const bcryptLib = getBcrypt();
+        const hashedPassword = bcryptLib.hashSync(newPassword, 10);
+        
+        const { setDoc, doc } = window.firebaseFunctions;
+        await setDoc(doc(db, 'users', window.resetPasswordUserId), {
+            password: hashedPassword
+        }, { merge: true });
+        
+        alert('✅ Senha resetada com sucesso!');
+        document.getElementById('reset-password-modal').style.display = 'none';
+        document.getElementById('reset-password-new').value = '';
+        document.getElementById('reset-password-confirm').value = '';
+        errorEl.style.display = 'none';
+        window.resetPasswordUserId = null;
+        
+        // Recarregar lista de usuários
+        loadUsers();
+        
+    } catch (error) {
+        console.error('Erro ao resetar senha:', error);
+        errorEl.textContent = 'Erro ao resetar senha. Tente novamente.';
+        errorEl.style.display = 'block';
+    }
+}
+
 // Expor funções globalmente
 window.openBetModal = openBetModal;
 window.openGameModal = openGameModal;
@@ -3133,3 +3773,4 @@ window.removePlayer = removePlayer;
 window.openPlayerModal = openPlayerModal;
 window.removeGame = removeGame;
 window.openParticipantCharts = openParticipantCharts;
+window.openResetPasswordModal = openResetPasswordModal;
