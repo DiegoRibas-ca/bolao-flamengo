@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bolão Flamengo 2026</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <canvas id="banner-animation"></canvas>
+            <div class="header-content">
+                <div class="header-logo-section">
+                    <div class="flamengo-shield">
+                        <img src="flamengo-shield.png" alt="Escudo Flamengo CRF" class="shield-image">
+                    </div>
+                    <h1>Bolão Flamengo 2026</h1>
+                </div>
+            </div>
+            <nav id="main-nav">
+                <button class="nav-btn active" data-view="ranking">Classificação</button>
+                <button class="nav-btn" data-view="games">Jogos</button>
+                <button class="nav-btn" data-view="my-bets" id="my-bets-nav" style="display: none;">Meus Palpites</button>
+                <button class="nav-btn" data-view="admin" id="admin-nav" style="display: none;">Admin</button>
+            </nav>
+            <div id="user-section">
+                <button id="login-btn" class="btn btn-primary">Entrar</button>
+                <div id="user-info" style="display: none;" class="user-info-container">
+                    <span id="user-name" class="user-name-text"></span>
+                    <button id="logout-btn" class="btn btn-logout">SAIR</button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- View: Ranking/Classificação -->
+            <div id="ranking-view" class="view active">
+                <div class="view-background"></div>
+                <div class="view-content">
+                    <div class="view-header">
+                        <h2>Classificação Geral</h2>
+                    </div>
+                    <div id="ranking-table-container">
+                        <table id="ranking-table" class="results-table">
+                            <thead id="ranking-thead">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Participante</th>
+                                    <th id="cravudinhas-header">🏆</th>
+                                    <!-- Headers de campeonatos serão adicionados dinamicamente -->
+                                    <th id="total-header">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ranking-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="charts-section">
+                        <div class="chart-container">
+                            <h3>Evolução da Disputa</h3>
+                            <canvas id="evolution-chart"></canvas>
+                            <div id="evolution-placeholder" class="chart-placeholder" style="display: none;">
+                                <p>📊 Aguardando dados suficientes para exibir gráfico de evolução</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Jogos -->
+            <div id="games-view" class="view">
+                <div class="view-background"></div>
+                <div class="view-content">
+                    <div class="view-header">
+                        <h2>Jogos do Flamengo</h2>
+                        <div class="filters">
+                            <select id="championship-filter">
+                                <option value="">Todos os campeonatos</option>
+                            </select>
+                            <select id="status-filter">
+                                <option value="">Todos os status</option>
+                                <option value="upcoming">Próximos</option>
+                                <option value="live">Ao vivo</option>
+                                <option value="finished">Finalizados</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="games-list"></div>
+                </div>
+            </div>
+
+            <!-- View: Meus Palpites -->
+            <div id="my-bets-view" class="view">
+                <div class="view-background"></div>
+                <div class="view-content">
+                    <h2>Meus Palpites</h2>
+                    <div id="bets-list"></div>
+                </div>
+            </div>
+
+            <!-- View: Admin -->
+            <div id="admin-view" class="view">
+                <h2>Painel Administrativo</h2>
+                
+                <div class="admin-tabs">
+                    <button class="admin-tab active" data-tab="config">Configurações</button>
+                    <button class="admin-tab" data-tab="games">Jogos</button>
+                    <button class="admin-tab" data-tab="players">Elenco</button>
+                    <button class="admin-tab" data-tab="invites">Convites</button>
+                </div>
+
+                <!-- Tab: Configurações -->
+                <div id="config-tab" class="admin-tab-content active">
+                    <h3>Pesos de Pontuação</h3>
+                    <div id="scoring-weights-config"></div>
+                    <button id="save-config" class="btn btn-primary">Salvar Configurações</button>
+                </div>
+
+                <!-- Tab: Jogos -->
+                <div id="games-tab" class="admin-tab-content">
+                    <div class="import-section">
+                        <h3>📥 Importar Jogos da Planilha</h3>
+                        <p class="help-text">Cole os dados da planilha do Google Sheets (copie as colunas Data, Hora, Competição, Mandante, Visitante)</p>
+                        <textarea id="import-games-text" placeholder="Cole aqui os dados da planilha (formato CSV ou separado por tabulação)&#10;Exemplo: 11/01/2026	18:00	Carioca	Flamengo	Portuguesa-RJ"></textarea>
+                        <button id="import-games-btn" class="btn btn-primary">Importar Jogos</button>
+                        <div id="import-status" style="margin-top: 15px; display: none;"></div>
+                    </div>
+                    <hr style="margin: 30px 0; border: 1px solid #e0e0e0;">
+                    <div class="games-actions">
+                        <button id="add-game-btn" class="btn btn-primary">+ Adicionar Jogo Manualmente</button>
+                    </div>
+                    <div id="admin-games-list"></div>
+                </div>
+
+                <!-- Tab: Elenco -->
+                <div id="players-tab" class="admin-tab-content">
+                    <div class="import-section">
+                        <h3>📥 Importar Jogadores</h3>
+                        <p class="help-text">Cole os dados da planilha (formato: Número | Nome | Abreviação)&#10;Exemplo: 10	Gabigol	GB</p>
+                        <textarea id="import-players-text" placeholder="Cole aqui os dados dos jogadores (formato CSV ou separado por tabulação)&#10;Exemplo: 10	Gabriel Barbosa	GB"></textarea>
+                        <button id="import-players-btn" class="btn btn-primary">Importar Jogadores</button>
+                        <div id="import-players-status" style="margin-top: 15px; display: none;"></div>
+                    </div>
+                    <hr style="margin: 30px 0; border: 1px solid #e0e0e0;">
+                    <div class="add-player-form">
+                        <div class="form-field">
+                            <label for="new-player-number">Número</label>
+                            <input type="number" id="new-player-number" placeholder="Ex: 10">
+                        </div>
+                        <div class="form-field">
+                            <label for="new-player-name">Nome do Jogador</label>
+                            <input type="text" id="new-player-name" placeholder="Ex: Gabriel Barbosa">
+                        </div>
+                        <div class="form-field">
+                            <label for="new-player-abbreviation">Abreviação</label>
+                            <input type="text" id="new-player-abbreviation" placeholder="GB" maxlength="2" style="text-transform: uppercase;">
+                        </div>
+                        <div class="form-field form-field-button">
+                            <button id="add-player-btn" class="btn btn-primary">Adicionar</button>
+                        </div>
+                    </div>
+                    <div id="players-list"></div>
+                </div>
+
+                <!-- Tab: Convites -->
+                <div id="invites-tab" class="admin-tab-content">
+                    <div class="invite-form">
+                        <div class="invite-form-row">
+                            <label for="invite-email">Email do participante</label>
+                            <input type="email" id="invite-email" placeholder="Email do participante">
+                        </div>
+                        <div class="invite-form-row">
+                            <label for="invite-name">Nome do participante</label>
+                            <input type="text" id="invite-name" placeholder="Nome do participante">
+                        </div>
+                        <div class="invite-form-row">
+                            <label for="invite-password">Senha temporária</label>
+                            <input type="password" id="invite-password" placeholder="Senha temporária">
+                        </div>
+                        <div class="invite-form-row">
+                            <label for="invite-role">Tipo de usuário</label>
+                            <select id="invite-role">
+                                <option value="participant">Participante</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                        </div>
+                        <button id="send-invite-btn" class="btn btn-primary">Enviar Convite</button>
+                    </div>
+                    <div id="invites-list"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Login -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Entrar no Bolão</h2>
+            <input type="email" id="login-email" placeholder="Email" required>
+            <input type="password" id="login-password" placeholder="Senha" required>
+            <button id="submit-login" class="btn btn-primary">Entrar</button>
+            <p id="login-error" class="error-message" style="display: none;"></p>
+        </div>
+    </div>
+
+    <!-- Modal: Palpite -->
+    <div id="bet-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close">&times;</span>
+            <h2>Fazer Palpite</h2>
+            <div id="bet-game-info" class="bet-game-header"></div>
+            
+            <div class="bet-scores">
+                <div class="score-input">
+                    <label>Gols Flamengo</label>
+                    <input type="number" id="bet-flamengo" min="0" max="20" required>
+                </div>
+                <span class="vs">x</span>
+                <div class="score-input">
+                    <label>Gols Adversário</label>
+                    <input type="number" id="bet-opponent" min="0" max="20" required>
+                </div>
+            </div>
+
+            <div class="bet-scorers">
+                <h3>Marcadores de Gols do Flamengo</h3>
+                <p class="help-text">Selecione os jogadores que marcarão gols (pode repetir)</p>
+                <div id="scorers-list"></div>
+                <button type="button" id="add-scorer-btn" class="btn btn-secondary btn-small">+ Adicionar Marcador</button>
+            </div>
+
+            <button id="submit-bet" class="btn btn-primary">Salvar Palpite</button>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar/Editar Jogo -->
+    <div id="game-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close">&times;</span>
+            <h2 id="game-modal-title">Adicionar Jogo</h2>
+            <select id="game-championship" required>
+                <option value="">Selecione o campeonato</option>
+            </select>
+            <input type="text" id="game-opponent" placeholder="Adversário" required>
+            <input type="datetime-local" id="game-date" required>
+            <div class="score-inputs">
+                <label>Placar Final (deixe em branco se ainda não aconteceu)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="game-flamengo-score" placeholder="Gols Flamengo" min="0">
+                    <span>x</span>
+                    <input type="number" id="game-opponent-score" placeholder="Gols Adversário" min="0">
+                </div>
+            </div>
+            <div class="game-scorers-section" style="margin: 20px 0;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 600;">Marcadores de Gols do Flamengo</label>
+                <p class="help-text" style="margin-bottom: 10px;">Selecione os jogadores que marcaram gols (pode repetir)</p>
+                <div id="game-scorers-list"></div>
+                <button type="button" id="add-game-scorer-btn" class="btn btn-secondary btn-small" style="margin-top: 10px;">+ Adicionar Marcador</button>
+            </div>
+            <div id="game-status-section" style="display: none;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 600;">Status do Jogo</label>
+                <select id="game-status">
+                    <option value="upcoming">Próximo</option>
+                    <option value="live">Ao vivo</option>
+                    <option value="finished">Finalizado</option>
+                </select>
+                <p class="help-text" style="margin-top: 5px; font-size: 12px; color: #666;">⚠️ Apenas administradores podem alterar o status. Jogos finalizados bloqueiam novos palpites.</p>
+            </div>
+            <button id="submit-game" class="btn btn-primary">Salvar</button>
+        </div>
+    </div>
+
+    <!-- Modal: Importar Jogos -->
+    <div id="import-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close">&times;</span>
+            <h2>Importar Jogos</h2>
+            <div id="import-preview"></div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="confirm-import-btn" class="btn btn-primary">Confirmar Importação</button>
+                <button id="cancel-import-btn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Importar Jogadores -->
+    <div id="import-players-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close">&times;</span>
+            <h2>Importar Jogadores</h2>
+            <div id="import-players-preview"></div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="confirm-import-players-btn" class="btn btn-primary">Confirmar Importação</button>
+                <button id="cancel-import-players-btn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Jogador -->
+    <div id="player-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="player-modal-title">Editar Jogador</h2>
+            <input type="number" id="edit-player-number" placeholder="Número da camisa">
+            <input type="text" id="edit-player-name" placeholder="Nome do jogador" required>
+            <input type="text" id="edit-player-abbreviation" placeholder="Abreviação (2 letras)" maxlength="2" style="text-transform: uppercase;">
+            <button id="submit-player-edit" class="btn btn-primary">Salvar</button>
+        </div>
+    </div>
+
+    <!-- Modal: Gráficos do Participante -->
+    <div id="participant-charts-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close">&times;</span>
+            <h2 id="participant-charts-title">Análise do Participante</h2>
+            <div id="participant-charts-container">
+                <div class="chart-container">
+                    <h3>Evolução de Pontos</h3>
+                    <canvas id="participant-evolution-chart"></canvas>
+                    <div id="participant-evolution-placeholder" class="chart-placeholder" style="display: none;">
+                        <p>📊 Aguardando dados suficientes</p>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h3>Pontos por Campeonato</h3>
+                    <canvas id="participant-championships-chart"></canvas>
+                    <div id="participant-championships-placeholder" class="chart-placeholder" style="display: none;">
+                        <p>📊 Aguardando dados suficientes</p>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h3>Desempenho por Tipo de Acerto</h3>
+                    <canvas id="participant-breakdown-chart"></canvas>
+                    <div id="participant-breakdown-placeholder" class="chart-placeholder" style="display: none;">
+                        <p>📊 Aguardando dados suficientes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+      // Importar configuração do Firebase
+      import { firebaseConfig } from './firebase-config.js';
+      
+      // Importar funções do Firebase
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+      import { 
+        getFirestore, 
+        collection, 
+        getDocs, 
+        setDoc, 
+        doc, 
+        query, 
+        where, 
+        onSnapshot, 
+        addDoc, 
+        updateDoc, 
+        deleteDoc,
+        Timestamp 
+      } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+      
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      
+      // Exportar para uso global no app.js
+      window.firebaseDb = db;
+      window.firebaseFunctions = {
+        collection,
+        getDocs,
+        setDoc,
+        doc,
+        query,
+        where,
+        onSnapshot,
+        addDoc,
+        updateDoc,
+        deleteDoc,
+        Timestamp
+      };
+      
+      console.log('Firebase inicializado com sucesso!');
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

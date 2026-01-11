@@ -1,0 +1,60 @@
+<!-- 
+  INSTRUÇÕES DE CONFIGURAÇÃO DO FIREBASE
+  
+  O código do Firebase já está configurado no index.html usando o arquivo firebase-config.js
+  
+  Estrutura atual:
+  1. firebase-config.js - Contém as credenciais (já configuradas)
+  2. index.html - Importa e inicializa o Firebase
+  
+  IMPORTANTE SOBRE SEGURANÇA:
+  As credenciais do Firebase são SEGURAS para serem públicas.
+  Veja SEGURANCA_FIREBASE.md para mais detalhes.
+  
+  Se precisar alterar as credenciais, edite o arquivo firebase-config.js
+-->
+
+<!-- Exemplo de como está configurado no index.html: -->
+<script type="module">
+  // Importar configuração do Firebase
+  import { firebaseConfig } from './firebase-config.js';
+  
+  // Importar funções do Firebase
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+  import { 
+    getFirestore, 
+    collection, 
+    getDocs, 
+    setDoc, 
+    doc, 
+    query, 
+    where, 
+    onSnapshot, 
+    addDoc, 
+    updateDoc, 
+    deleteDoc,
+    Timestamp 
+  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+  
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  
+  // Exportar para uso global no app.js
+  window.firebaseDb = db;
+  window.firebaseFunctions = {
+    collection,
+    getDocs,
+    setDoc,
+    doc,
+    query,
+    where,
+    onSnapshot,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    Timestamp
+  };
+  
+  console.log('Firebase inicializado com sucesso!');
+</script>

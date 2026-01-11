@@ -1,0 +1,23 @@
+{
+  "name": "app-bolao",
+  "version": "1.0.0",
+  "description": "Bolão de jogos do Flamengo",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx http-server -p 8080 -o",
+    "build": "echo 'No build step needed for vanilla JS'"
+  },
+  "keywords": [
+    "bolao",
+    "flamengo",
+    "firebase"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {
+    "firebase": "^12.7.0"
+  }
+}

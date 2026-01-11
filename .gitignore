@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+*.log
+.env
+firebase-config.json
+
+# Opcional: Se quiser manter as credenciais privadas no git
+# Descomente a linha abaixo (mas lembre-se: as credenciais são seguras para serem públicas)
+# firebase-config.js
