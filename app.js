@@ -1,3 +1,70 @@
+// Função para exibir alertas usando Bootstrap Modal
+function showAlert(message, type = 'info', title = null) {
+    const modal = document.getElementById('alertModal');
+    const modalTitle = document.getElementById('alertModalTitle');
+    const modalBody = document.getElementById('alertModalBody');
+    const modalHeader = document.getElementById('alertModalHeader');
+    
+    // Verificar se Bootstrap está disponível
+    if (typeof bootstrap === 'undefined') {
+        // Fallback para alert nativo se Bootstrap não estiver carregado
+        alert(message);
+        return;
+    }
+    
+    // Definir título padrão baseado no tipo (sem ícones)
+    if (!title) {
+        switch(type) {
+            case 'success':
+                title = 'Sucesso';
+                break;
+            case 'error':
+            case 'danger':
+                title = 'Erro';
+                break;
+            case 'warning':
+                title = 'Atenção';
+                break;
+            default:
+                title = 'Informação';
+        }
+    }
+    
+    modalTitle.textContent = title;
+    modalBody.innerHTML = `<p class="mb-0">${message}</p>`;
+    
+    // Remover classes de tipo anteriores
+    modalHeader.className = 'modal-header';
+    const closeBtn = modalHeader.querySelector('.btn-close');
+    
+    // Adicionar classe de tipo e ajustar botão de fechar
+    if (type === 'success') {
+        modalHeader.classList.add('bg-success', 'text-white');
+        if (closeBtn) closeBtn.classList.add('btn-close-white');
+    } else if (type === 'error' || type === 'danger') {
+        modalHeader.classList.add('bg-danger', 'text-white');
+        if (closeBtn) closeBtn.classList.add('btn-close-white');
+    } else if (type === 'warning') {
+        modalHeader.classList.add('bg-warning', 'text-dark');
+        if (closeBtn) closeBtn.classList.remove('btn-close-white');
+    } else {
+        modalHeader.classList.add('bg-info', 'text-white');
+        if (closeBtn) closeBtn.classList.add('btn-close-white');
+    }
+    
+    // Mostrar modal usando Bootstrap
+    // Verificar se já existe uma instância do modal
+    let bsModal = bootstrap.Modal.getInstance(modal);
+    if (!bsModal) {
+        bsModal = new bootstrap.Modal(modal, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+    }
+    bsModal.show();
+}
+
 // Helper para obter bcryptjs
 function getBcrypt() {
     // bcryptjs pode estar em diferentes lugares dependendo de como foi carregado
@@ -980,7 +1047,7 @@ function getStatusText(status) {
 
 function openBetModal(gameId) {
     if (!currentUser) {
-        alert('Faça login para fazer palpites');
+        showAlert('Faça login para fazer palpites', 'warning', 'Login Necessário');
         return;
     }
 
@@ -989,7 +1056,7 @@ function openBetModal(gameId) {
     
     // Verificar se o jogo está ao vivo ou finalizado
     if (game && (game.status === 'live' || game.status === 'finished')) {
-        alert('Este jogo está ' + (game.status === 'live' ? 'ao vivo' : 'finalizado') + '. Não é possível fazer ou alterar palpites.');
+        showAlert('Este jogo está ' + (game.status === 'live' ? 'ao vivo' : 'finalizado') + '. Não é possível fazer ou alterar palpites.', 'warning', 'Jogo Indisponível');
         return;
     }
     
@@ -1140,7 +1207,13 @@ async function submitBet() {
     const opponentScore = parseInt(document.getElementById('bet-opponent').value);
 
     if (isNaN(flamengoScore) || isNaN(opponentScore)) {
-        alert('Preencha os placares corretamente');
+        showAlert('Preencha os placares corretamente', 'error', 'Erro de Validação');
+        return;
+    }
+
+    // Validar que os placares são números válidos e não negativos
+    if (flamengoScore < 0 || opponentScore < 0) {
+        showAlert('Os placares não podem ser negativos', 'error', 'Erro de Validação');
         return;
     }
 
@@ -1157,9 +1230,23 @@ async function submitBet() {
         })
         .filter(id => id);
 
-    // Validar número de marcadores
+    // Validar número de marcadores - NÃO PODE ultrapassar número de gols do Flamengo
     if (scorers.length > flamengoScore) {
-        alert(`Você selecionou ${scorers.length} marcadores, mas o Flamengo tem apenas ${flamengoScore} gols no seu palpite.`);
+        showAlert(
+            `Você selecionou <strong>${scorers.length} marcador(es)</strong>, mas o Flamengo tem apenas <strong>${flamengoScore} gol(s)</strong> no seu palpite.<br><br>Por favor, ajuste o número de marcadores ou o placar do Flamengo.`,
+            'error',
+            'Número de Marcadores Inválido'
+        );
+        return;
+    }
+    
+    // Validação adicional: se o Flamengo tem 0 gols, não pode ter marcadores
+    if (flamengoScore === 0 && scorers.length > 0) {
+        showAlert(
+            'Se o Flamengo não marcou gols (0), não é possível adicionar marcadores.',
+            'error',
+            'Validação de Marcadores'
+        );
         return;
     }
 
@@ -1190,14 +1277,14 @@ async function submitBet() {
                 bets.push({ ...betData, id: betId });
             }
 
-            alert('Palpite salvo com sucesso!');
+            showAlert('Palpite salvo com sucesso!', 'success', 'Sucesso');
             document.getElementById('bet-modal').style.display = 'none';
             
             // Atualizar visualização dos jogos para mostrar o palpite
             renderGames();
         } catch (error) {
             console.error('Erro ao salvar palpite:', error);
-            alert('Erro ao salvar palpite. Tente novamente.');
+            showAlert('Erro ao salvar palpite. Tente novamente.', 'error', 'Erro');
         }
     } else {
         // Modo offline
@@ -1207,7 +1294,7 @@ async function submitBet() {
         } else {
             bets.push(betData);
         }
-        alert('Palpite salvo!');
+        showAlert('Palpite salvo!', 'success', 'Sucesso');
         document.getElementById('bet-modal').style.display = 'none';
         
         // Atualizar visualização dos jogos para mostrar o palpite
@@ -2061,14 +2148,14 @@ async function saveConfig() {
         try {
             const { setDoc, doc } = window.firebaseFunctions;
             await setDoc(doc(db, 'config', 'main'), newConfig);
-            alert('✅ Configurações salvas com sucesso!');
+            showAlert('Configurações salvas com sucesso!', 'success', 'Sucesso');
             renderConfig(); // Recarregar para mostrar valores atualizados
         } catch (error) {
             console.error('Erro ao salvar configurações:', error);
-            alert('❌ Erro ao salvar configurações.');
+            showAlert('Erro ao salvar configurações. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
-        alert('✅ Configurações salvas!');
+        showAlert('Configurações salvas!', 'success', '✅ Sucesso');
         renderConfig();
     }
 }
@@ -2292,7 +2379,7 @@ async function saveGame() {
     }
 
     if (!championship || !opponent || !date) {
-        alert('Preencha todos os campos obrigatórios');
+        showAlert('Preencha todos os campos obrigatórios', 'error', 'Campos Obrigatórios');
         return;
     }
 
@@ -2309,9 +2396,24 @@ async function saveGame() {
         })
         .filter(id => id);
 
-    // Validar número de marcadores
-    if (flamengoScore && parseInt(flamengoScore) > 0 && scorers.length > parseInt(flamengoScore)) {
-        alert(`Você selecionou ${scorers.length} marcadores, mas o Flamengo tem apenas ${flamengoScore} gols.`);
+    // Validar número de marcadores - NÃO PODE ultrapassar número de gols do Flamengo
+    const flamengoScoreInt = flamengoScore ? parseInt(flamengoScore) : 0;
+    if (flamengoScoreInt > 0 && scorers.length > flamengoScoreInt) {
+        showAlert(
+            `Você selecionou <strong>${scorers.length} marcador(es)</strong>, mas o Flamengo tem apenas <strong>${flamengoScoreInt} gol(s)</strong>.<br><br>Por favor, ajuste o número de marcadores ou o placar do Flamengo.`,
+            'error',
+            'Número de Marcadores Inválido'
+        );
+        return;
+    }
+    
+    // Validação adicional: se o Flamengo tem 0 gols, não pode ter marcadores
+    if (flamengoScoreInt === 0 && scorers.length > 0) {
+        showAlert(
+            'Se o Flamengo não marcou gols (0), não é possível adicionar marcadores.',
+            'error',
+            'Validação de Marcadores'
+        );
         return;
     }
 
@@ -2341,12 +2443,12 @@ async function saveGame() {
                 });
             }
 
-            alert('Jogo salvo!');
+            showAlert('Jogo salvo com sucesso!', 'success', 'Sucesso');
             document.getElementById('game-modal').style.display = 'none';
             currentGameId = null;
         } catch (error) {
             console.error('Erro ao salvar jogo:', error);
-            alert('Erro ao salvar jogo.');
+            showAlert('Erro ao salvar jogo. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
         if (currentGameId) {
@@ -2357,7 +2459,7 @@ async function saveGame() {
         } else {
             games.push({ id: Date.now().toString(), ...gameData });
         }
-        alert('Jogo salvo!');
+        showAlert('Jogo salvo!', 'success', '✅ Sucesso');
         document.getElementById('game-modal').style.display = 'none';
         renderAdminGames();
     }
@@ -2385,12 +2487,12 @@ async function addPlayer() {
     const abbreviation = document.getElementById('new-player-abbreviation').value.toUpperCase();
 
     if (!name) {
-        alert('Digite o nome do jogador');
+        showAlert('Digite o nome do jogador', 'error', 'Campo Obrigatório');
         return;
     }
 
     if (abbreviation && abbreviation.length !== 2) {
-        alert('A abreviação deve ter exatamente 2 letras');
+        showAlert('A abreviação deve ter exatamente 2 letras', 'error', 'Validação');
         return;
     }
 
@@ -2407,7 +2509,7 @@ async function addPlayer() {
             document.getElementById('new-player-name').value = '';
             document.getElementById('new-player-number').value = '';
             document.getElementById('new-player-abbreviation').value = '';
-            alert('Jogador adicionado!');
+            showAlert('Jogador adicionado com sucesso!', 'success', 'Sucesso');
         } catch (error) {
             console.error('Erro ao adicionar jogador:', error);
             console.error('Código do erro:', error.code);
@@ -2415,13 +2517,13 @@ async function addPlayer() {
             
             let errorMsg = 'Erro ao adicionar jogador.';
             if (error.code === 'permission-denied') {
-                errorMsg = '❌ Permissão negada! Verifique as regras de segurança do Firestore e certifique-se de estar logado como admin.';
+                errorMsg = 'Permissão negada! Verifique as regras de segurança do Firestore e certifique-se de estar logado como admin.';
             } else if (error.code === 'not-found') {
-                errorMsg = '❌ Coleção não encontrada! Certifique-se de que a coleção "players" existe no Firestore.';
+                errorMsg = 'Coleção não encontrada! Certifique-se de que a coleção "players" existe no Firestore.';
             } else {
-                errorMsg = `❌ Erro: ${error.message || error.code || 'Erro desconhecido'}. Verifique o console (F12) para mais detalhes.`;
+                errorMsg = `Erro: ${error.message || error.code || 'Erro desconhecido'}. Verifique o console (F12) para mais detalhes.`;
             }
-            alert(errorMsg);
+            showAlert(errorMsg, 'error', 'Erro');
         }
     } else {
         players.push({ id: Date.now().toString(), ...playerData });
@@ -2439,10 +2541,10 @@ async function removePlayer(playerId) {
         try {
             const { deleteDoc, doc } = window.firebaseFunctions;
             await deleteDoc(doc(db, 'players', playerId));
-            alert('Jogador removido!');
+            showAlert('Jogador removido com sucesso!', 'success', 'Sucesso');
         } catch (error) {
             console.error('Erro ao remover jogador:', error);
-            alert('Erro ao remover jogador.');
+            showAlert('Erro ao remover jogador. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
         players = players.filter(p => p.id !== playerId);
@@ -2453,7 +2555,7 @@ async function removePlayer(playerId) {
 async function removeGame(gameId) {
     const game = games.find(g => g.id === gameId);
     if (!game) {
-        alert('Jogo não encontrado');
+        showAlert('Jogo não encontrado', 'error', 'Erro');
         return;
     }
 
@@ -2471,7 +2573,7 @@ async function removeGame(gameId) {
             // Remover da lista local
             games = games.filter(g => g.id !== gameId);
             
-            alert('Jogo removido com sucesso!');
+            showAlert('Jogo removido com sucesso!', 'success', 'Sucesso');
             renderAdminGames();
             
             // Atualizar outras views se necessário
@@ -2483,12 +2585,12 @@ async function removeGame(gameId) {
             }
         } catch (error) {
             console.error('Erro ao remover jogo:', error);
-            alert('Erro ao remover jogo. Verifique o console para mais detalhes.');
+            showAlert('Erro ao remover jogo. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
         // Modo offline
         games = games.filter(g => g.id !== gameId);
-        alert('Jogo removido!');
+        showAlert('Jogo removido!', 'success', 'Sucesso');
         renderAdminGames();
         
         // Atualizar outras views se necessário
@@ -2508,7 +2610,7 @@ async function sendInvite() {
     const role = document.getElementById('invite-role').value;
 
     if (!email || !name || !password) {
-        alert('Preencha todos os campos');
+        showAlert('Preencha todos os campos', 'error', '❌ Campos Obrigatórios');
         return;
     }
 
@@ -2519,7 +2621,7 @@ async function sendInvite() {
         hashedPassword = bcryptLib.hashSync(password, 10);
     } catch (error) {
         console.error('Erro ao fazer hash da senha:', error);
-        alert('Erro ao processar senha. Verifique se bcryptjs foi carregado e recarregue a página.');
+        showAlert('Erro ao processar senha. Verifique se bcryptjs foi carregado e recarregue a página.', 'error', 'Erro');
         return;
     }
 
@@ -2544,14 +2646,14 @@ async function sendInvite() {
             document.getElementById('invite-name').value = '';
             document.getElementById('invite-password').value = '';
             document.getElementById('invite-role').value = 'participant';
-            alert('Convite enviado!');
+            showAlert('Convite enviado com sucesso!', 'success', 'Sucesso');
             loadInvites();
         } catch (error) {
             console.error('Erro ao enviar convite:', error);
-            alert('Erro ao enviar convite.');
+            showAlert('Erro ao enviar convite. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
-        alert('Convite criado (modo offline)');
+        showAlert('Convite criado (modo offline)', 'info', 'ℹ️ Informação');
     }
 }
 
@@ -2654,7 +2756,7 @@ let isImportingPlayers = false;
 function parseImportData() {
     const text = document.getElementById('import-games-text').value.trim();
     if (!text) {
-        alert('Por favor, cole os dados da planilha');
+        showAlert('Por favor, cole os dados da planilha', 'warning', 'Dados Necessários');
         return;
     }
 
@@ -2738,7 +2840,7 @@ function parseImportData() {
     });
 
     if (parsedGames.length === 0) {
-        alert('Nenhum jogo válido encontrado. Verifique o formato dos dados.');
+        showAlert('Nenhum jogo válido encontrado. Verifique o formato dos dados.', 'error', 'Erro de Importação');
         return;
     }
 
@@ -2792,7 +2894,7 @@ async function confirmImport() {
     }
 
     if (gamesToImport.length === 0) {
-        alert('Nenhum jogo para importar');
+        showAlert('Nenhum jogo para importar', 'warning', 'Nenhum Dado');
         return;
     }
 
@@ -2988,7 +3090,7 @@ async function confirmImport() {
 function parseImportPlayersData() {
     const text = document.getElementById('import-players-text').value.trim();
     if (!text) {
-        alert('Por favor, cole os dados da planilha');
+        showAlert('Por favor, cole os dados da planilha', 'warning', 'Dados Necessários');
         return;
     }
 
@@ -3053,7 +3155,7 @@ function parseImportPlayersData() {
     });
 
     if (parsedPlayers.length === 0) {
-        alert('Nenhum jogador válido encontrado. Verifique o formato dos dados.');
+        showAlert('Nenhum jogador válido encontrado. Verifique o formato dos dados.', 'error', 'Erro de Importação');
         return;
     }
 
@@ -3102,7 +3204,7 @@ async function confirmImportPlayers() {
     }
 
     if (playersToImport.length === 0) {
-        alert('Nenhum jogador para importar');
+        showAlert('Nenhum jogador para importar', 'warning', 'Nenhum Dado');
         return;
     }
 
@@ -3327,12 +3429,12 @@ async function savePlayerEdit() {
     const abbreviation = document.getElementById('edit-player-abbreviation').value.toUpperCase();
 
     if (!name) {
-        alert('Digite o nome do jogador');
+        showAlert('Digite o nome do jogador', 'error', 'Campo Obrigatório');
         return;
     }
 
     if (abbreviation && abbreviation.length !== 2) {
-        alert('A abreviação deve ter exatamente 2 letras');
+        showAlert('A abreviação deve ter exatamente 2 letras', 'error', 'Validação');
         return;
     }
 
@@ -3348,17 +3450,17 @@ async function savePlayerEdit() {
             
             if (currentPlayerId) {
                 await setDoc(doc(db, 'players', currentPlayerId), playerData, { merge: true });
-                alert('Jogador atualizado!');
+                showAlert('Jogador atualizado com sucesso!', 'success', 'Sucesso');
             } else {
                 await addDoc(collection(db, 'players'), playerData);
-                alert('Jogador adicionado!');
+                showAlert('Jogador adicionado com sucesso!', 'success', 'Sucesso');
             }
             
             document.getElementById('player-modal').style.display = 'none';
             currentPlayerId = null;
         } catch (error) {
             console.error('Erro ao salvar jogador:', error);
-            alert('Erro ao salvar jogador.');
+            showAlert('Erro ao salvar jogador. Verifique o console para mais detalhes.', 'error', 'Erro');
         }
     } else {
         if (currentPlayerId) {
@@ -3555,7 +3657,7 @@ function renderProfile() {
 
 async function changePassword() {
     if (!currentUser || !db) {
-        alert('Erro: usuário não autenticado');
+        showAlert('Erro: usuário não autenticado', 'error', 'Erro de Autenticação');
         return;
     }
     
@@ -3624,7 +3726,7 @@ async function changePassword() {
             password: hashedPassword
         }, { merge: true });
         
-        alert('✅ Senha alterada com sucesso!');
+        showAlert('Senha alterada com sucesso!', 'success', 'Sucesso');
         document.getElementById('change-password-modal').style.display = 'none';
         document.getElementById('current-password').value = '';
         document.getElementById('new-password').value = '';
@@ -3713,7 +3815,7 @@ function openResetPasswordModal(userId, userName) {
 
 async function resetUserPassword() {
     if (!currentUser?.isAdmin || !db || !window.resetPasswordUserId) {
-        alert('Erro: operação não autorizada');
+        showAlert('Erro: operação não autorizada', 'error', 'Acesso Negado');
         return;
     }
     
@@ -3749,7 +3851,7 @@ async function resetUserPassword() {
             password: hashedPassword
         }, { merge: true });
         
-        alert('✅ Senha resetada com sucesso!');
+        showAlert('Senha resetada com sucesso!', 'success', 'Sucesso');
         document.getElementById('reset-password-modal').style.display = 'none';
         document.getElementById('reset-password-new').value = '';
         document.getElementById('reset-password-confirm').value = '';
