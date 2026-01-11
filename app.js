@@ -1154,33 +1154,35 @@ function formatGameDateTime(gameDate) {
     // Converter para Date se necessário
     const date = gameDate?.toDate ? gameDate.toDate() : new Date(gameDate);
     
-    // Formatar para Rio de Janeiro (America/Sao_Paulo)
+    // Formatar para Rio de Janeiro (America/Sao_Paulo) com AM/PM
     const rioDateFormatter = new Intl.DateTimeFormat('pt-BR', {
         timeZone: 'America/Sao_Paulo',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
     });
-    const rioTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+    const rioTimeFormatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Sao_Paulo',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
     const rioDate = rioDateFormatter.format(date);
     const rioTime = rioTimeFormatter.format(date);
-    const rioDateTime = `${rioDate} ${rioTime}`;
+    const rioDateTime = `${rioDate} ${rioTime} BRA`;
     
-    // Formatar para EST (America/Toronto - Ontario, Canadá)
+    // Formatar para EST (America/Toronto - Ontario, Canadá) com AM/PM
     const estDateFormatter = new Intl.DateTimeFormat('pt-BR', {
         timeZone: 'America/Toronto',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
     });
-    const estTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+    const estTimeFormatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Toronto',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
     const estDate = estDateFormatter.format(date);
     const estTime = estTimeFormatter.format(date);
@@ -1197,21 +1199,23 @@ function formatGameDateTime(gameDate) {
 function formatGameTime(gameDate) {
     const date = gameDate?.toDate ? gameDate.toDate() : new Date(gameDate);
     
-    // Hora do Rio de Janeiro
-    const rioTime = date.toLocaleTimeString('pt-BR', {
+    // Hora do Rio de Janeiro com AM/PM
+    const rioTime = date.toLocaleTimeString('en-US', {
         timeZone: 'America/Sao_Paulo',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
     
-    // Hora EST
-    const estTime = date.toLocaleTimeString('pt-BR', {
+    // Hora EST com AM/PM
+    const estTime = date.toLocaleTimeString('en-US', {
         timeZone: 'America/Toronto',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
     
-    return `${rioTime} (${estTime} EST)`;
+    return `${rioTime} BRA (${estTime} EST)`;
 }
 
 function openBetModal(gameId) {
@@ -2511,7 +2515,33 @@ function openGameModal(gameId = null) {
     if (game) {
         document.getElementById('game-championship').value = game.championship;
         document.getElementById('game-opponent').value = game.opponent;
-        document.getElementById('game-date').value = new Date(game.date).toISOString().slice(0, 16);
+        
+        // Converter data do jogo para timezone do Rio de Janeiro e preencher campos
+        const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
+        
+        // Converter para timezone do Rio de Janeiro usando Intl.DateTimeFormat
+        const rioFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
+        const parts = rioFormatter.formatToParts(gameDate);
+        const year = parts.find(p => p.type === 'year').value;
+        const month = parts.find(p => p.type === 'month').value;
+        const day = parts.find(p => p.type === 'day').value;
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        
+        // Preencher campos de data e hora
+        document.getElementById('game-date-input').value = `${year}-${month}-${day}`;
+        document.getElementById('game-hour-input').value = parseInt(hour);
+        document.getElementById('game-minute-input').value = parseInt(minute);
+        
         document.getElementById('game-flamengo-score').value = game.flamengoScore || '';
         document.getElementById('game-opponent-score').value = game.opponentScore || '';
         if (currentUser?.isAdmin) {
@@ -2523,7 +2553,9 @@ function openGameModal(gameId = null) {
     } else {
         document.getElementById('game-championship').value = '';
         document.getElementById('game-opponent').value = '';
-        document.getElementById('game-date').value = '';
+        document.getElementById('game-date-input').value = '';
+        document.getElementById('game-hour-input').value = '';
+        document.getElementById('game-minute-input').value = '';
         document.getElementById('game-flamengo-score').value = '';
         document.getElementById('game-opponent-score').value = '';
         if (currentUser?.isAdmin) {
@@ -2653,7 +2685,9 @@ function renderGameScorers(scorers) {
 async function saveGame() {
     const championship = document.getElementById('game-championship').value;
     const opponent = document.getElementById('game-opponent').value;
-    const date = document.getElementById('game-date').value;
+    const dateInput = document.getElementById('game-date-input').value;
+    const hourInput = document.getElementById('game-hour-input').value;
+    const minuteInput = document.getElementById('game-minute-input').value;
     const flamengoScore = document.getElementById('game-flamengo-score').value;
     const opponentScore = document.getElementById('game-opponent-score').value;
     
@@ -2669,10 +2703,30 @@ async function saveGame() {
         }
     }
 
-    if (!championship || !opponent || !date) {
+    if (!championship || !opponent || !dateInput || hourInput === '' || minuteInput === '') {
         showAlert('Preencha todos os campos obrigatórios', 'error', 'Campos Obrigatórios');
         return;
     }
+    
+    // Validar hora e minuto
+    const hour = parseInt(hourInput);
+    const minute = parseInt(minuteInput);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        showAlert('Hora ou minuto inválidos. Hora deve ser entre 0-23 e minuto entre 0-59', 'error', 'Validação');
+        return;
+    }
+    
+    // Criar data no timezone do Rio de Janeiro
+    // A data do input está no formato YYYY-MM-DD
+    const [year, month, day] = dateInput.split('-').map(Number);
+    
+    // Criar uma string de data/hora no formato ISO assumindo que é horário do Rio de Janeiro (UTC-3)
+    // Brasil não usa mais horário de verão desde 2019, então sempre UTC-3
+    const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00-03:00`;
+    
+    // Criar a data - o JavaScript vai converter automaticamente para UTC
+    // Esta data representa o horário do Rio de Janeiro
+    const finalDate = new Date(dateString);
 
     // Coletar marcadores de gols (compatível com Choices.js)
     const scorerSelects = document.querySelectorAll('#game-scorers-list select');
@@ -2711,7 +2765,7 @@ async function saveGame() {
     const gameData = {
         championship,
         opponent,
-        date: new Date(date),
+        date: finalDate, // Data já ajustada para representar o horário do Rio de Janeiro
         status,
         flamengoScore: flamengoScore ? parseInt(flamengoScore) : null,
         opponentScore: opponentScore ? parseInt(opponentScore) : null,
@@ -3144,8 +3198,10 @@ function parseImportData() {
             }
         }
 
-        // Criar data
-        const gameDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, minute);
+        // Criar data no timezone do Rio de Janeiro (UTC-3)
+        // Formato: YYYY-MM-DDTHH:mm:ss-03:00
+        const dateString = `${parseInt(year)}-${String(parseInt(month)).padStart(2, '0')}-${String(parseInt(day)).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00-03:00`;
+        const gameDate = new Date(dateString);
 
         // Determinar adversário (sempre Flamengo vs X ou X vs Flamengo)
         let opponent = '';

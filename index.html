@@ -357,7 +357,24 @@
                 <option value="">Selecione o campeonato</option>
             </select>
             <input type="text" id="game-opponent" placeholder="Adversário" required>
-            <input type="datetime-local" id="game-date" required>
+            <div class="date-time-inputs">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Data e Hora do Jogo (Horário do Rio de Janeiro)</label>
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: end;">
+                    <div>
+                        <label for="game-date-input" class="form-label" style="font-size: 13px; margin-bottom: 5px;">Data</label>
+                        <input type="date" id="game-date-input" class="form-control" required>
+                    </div>
+                    <div>
+                        <label for="game-hour-input" class="form-label" style="font-size: 13px; margin-bottom: 5px;">Hora</label>
+                        <input type="number" id="game-hour-input" class="form-control" min="0" max="23" placeholder="16" required>
+                    </div>
+                    <div>
+                        <label for="game-minute-input" class="form-label" style="font-size: 13px; margin-bottom: 5px;">Minuto</label>
+                        <input type="number" id="game-minute-input" class="form-control" min="0" max="59" placeholder="00" required>
+                    </div>
+                </div>
+                <small class="help-text" style="margin-top: 5px; display: block; color: #666; font-size: 12px;">⚠️ Horário será salvo no timezone do Rio de Janeiro (America/Sao_Paulo)</small>
+            </div>
             <div class="score-inputs">
                 <label>Placar Final (deixe em branco se ainda não aconteceu)</label>
                 <div style="display: flex; gap: 10px; align-items: center;">

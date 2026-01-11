@@ -1999,6 +1999,45 @@ main {
     border-radius: 8px;
 }
 
+/* Campos de data e hora */
+.date-time-inputs {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 2px solid #e0e0e0;
+}
+
+.date-time-inputs label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.date-time-inputs .form-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.date-time-inputs input[type="date"],
+.date-time-inputs input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.date-time-inputs input[type="date"]:focus,
+.date-time-inputs input[type="number"]:focus {
+    border-color: var(--flamengo-red);
+    box-shadow: 0 0 0 4px rgba(200, 16, 46, 0.1);
+    outline: none;
+}
+
 /* Seção de detalhes do palpite */
 .bet-details-section {
     margin-top: 15px;
@@ -2468,7 +2507,7 @@ main {
         scrollbar-width: none; /* Firefox */
         -ms-overflow-style: none; /* IE/Edge */
         position: relative;
-        padding-right: 40px; /* Espaço para a seta de scroll */
+        padding: 5px 40px 5px 5px; /* 5px em todos os lados, mas mantém 40px à direita para a seta de scroll */
     }
 
     #main-nav::-webkit-scrollbar {
@@ -3106,5 +3145,21 @@ main {
     
     .form-label {
         font-size: 13px;
+    }
+
+    /* Campos de data e hora responsivos */
+    .date-time-inputs {
+        padding: 12px;
+    }
+
+    .date-time-inputs > div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+
+    .date-time-inputs input[type="date"],
+    .date-time-inputs input[type="number"] {
+        padding: 10px 12px;
+        font-size: 14px;
     }
 }
