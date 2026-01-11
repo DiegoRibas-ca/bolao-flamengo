@@ -41,6 +41,16 @@ body {
     animation: fadeInUp 0.6s ease-out;
 }
 
+/* Em mobile, usar container-fluid para evitar paddings */
+@media (max-width: 768px) {
+    .container-mobile-fluid {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+}
+
 @keyframes fadeInUp {
     from {
         opacity: 0;
@@ -137,6 +147,8 @@ header h1 {
     flex-wrap: wrap;
     position: relative;
     z-index: 1;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
 .nav-btn {
@@ -1430,11 +1442,12 @@ main {
 }
 
 .config-section {
-    margin-bottom: 40px;
-    padding: 25px;
+    margin-bottom: 30px;
+    padding: 20px;
     background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
     border-radius: 12px;
     border: 2px solid #e8e8e8;
+    width: 100%;
 }
 
 .config-section h3 {
@@ -1458,12 +1471,14 @@ main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
+    padding: 15px;
     background: white;
     border-radius: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 12px;
     border: 2px solid #e8e8e8;
     transition: all 0.3s;
+    width: 100%;
+    gap: 15px;
 }
 
 .config-item:hover {
@@ -1493,11 +1508,13 @@ main {
 }
 
 .config-item input {
-    width: 120px;
+    width: 100px;
+    min-width: 80px;
     margin: 0;
-    padding: 12px;
+    padding: 10px;
     font-weight: 700;
     text-align: center;
+    flex-shrink: 0;
 }
 
 /* Formulário de adicionar jogador - usando Bootstrap grid */
@@ -2014,13 +2031,19 @@ main {
 }
 
 .score-cell {
-    cursor: pointer;
     transition: all 0.3s;
 }
 
-.score-cell:hover {
-    transform: scale(1.1);
-    z-index: 10;
+/* Linha da tabela de classificação clicável */
+.ranking-row-clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.ranking-row-clickable:hover {
+    background: linear-gradient(90deg, #fff5f5 0%, #ffffff 100%) !important;
+    transform: scale(1.01);
+    box-shadow: 0 2px 8px rgba(200, 16, 46, 0.15);
 }
 
 /* Responsive */
@@ -2193,11 +2216,22 @@ main {
 
 @media (max-width: 768px) {
     body {
-        padding: 10px;
+        padding: 0 !important;
     }
 
     .container {
-        border-radius: 10px;
+        border-radius: 0;
+        margin: 0 !important;
+        max-width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    /* Sobrescrever paddings do Bootstrap container em mobile */
+    .container,
+    .container-fluid {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
     
     /* Bootstrap Grid adjustments */
@@ -2244,23 +2278,34 @@ main {
 
     #main-nav {
         width: 100%;
-        justify-content: center;
+        justify-content: flex-start;
         margin-top: 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+        position: relative;
+        padding-right: 40px; /* Espaço para a seta de scroll */
+    }
+
+    #main-nav::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
     }
 
     .nav-btn {
-        padding: 8px 16px;
-        font-size: 12px;
-        flex: 1;
-        min-width: 0;
+        padding: 10px 18px;
+        font-size: 13px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        min-width: auto;
     }
 
     main {
-        padding: 15px;
+        padding: 15px 10px;
     }
 
     .view-content {
-        padding: 20px 15px;
+        padding: 20px 10px;
         border-radius: 15px;
     }
 
@@ -2290,10 +2335,11 @@ main {
     }
 
     #ranking-table-container {
-        padding: 10px;
+        padding: 10px 0;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         max-width: 100%;
+        position: relative;
     }
 
     .results-table {
@@ -2534,8 +2580,15 @@ main {
     .admin-tabs {
         flex-direction: row;
         overflow-x: auto;
-        padding: 10px;
+        padding: 10px 40px 10px 10px;
         -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+        position: relative;
+    }
+
+    .admin-tabs::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
     }
 
     .admin-tab {
@@ -2595,6 +2648,124 @@ main {
     .profile-field span {
         text-align: left;
     }
+
+    /* Configurações responsivas */
+    .config-section {
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .config-section h3 {
+        font-size: 1.2em;
+        margin-bottom: 15px;
+    }
+
+    .config-item {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+        gap: 12px;
+    }
+
+    .config-item label {
+        width: 100%;
+    }
+
+    .config-item input {
+        width: 100%;
+        max-width: 150px;
+    }
+
+    .config-description {
+        font-size: 13px;
+        margin-bottom: 15px;
+    }
+}
+
+/* Wrapper para elementos com scroll horizontal */
+.scroll-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+/* Indicador de scroll horizontal */
+.scroll-indicator {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 35px;
+    height: 50px;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.3s;
+    border-radius: 0;
+}
+
+.scroll-indicator-right {
+    right: 0;
+    background: linear-gradient(to left, rgba(200, 16, 46, 0.4) 0%, rgba(200, 16, 46, 0) 100%);
+}
+
+.scroll-indicator-left {
+    left: 0;
+    background: linear-gradient(to right, rgba(200, 16, 46, 0.4) 0%, rgba(200, 16, 46, 0) 100%);
+}
+
+.scroll-indicator.visible {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.scroll-indicator-right::after {
+    content: '→';
+    font-size: 20px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    margin-right: 5px;
+}
+
+.scroll-indicator-left::after {
+    content: '←';
+    font-size: 20px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    margin-left: 5px;
+}
+
+.scroll-indicator:hover {
+    opacity: 0.8;
+}
+
+.scroll-indicator-right:hover::after {
+    transform: translateX(2px);
+    transition: transform 0.2s;
+}
+
+.scroll-indicator-left:hover::after {
+    transform: translateX(-2px);
+    transition: transform 0.2s;
+}
+
+/* Para elementos específicos, ajustar posição */
+.scroll-wrapper #main-nav ~ .scroll-indicator,
+.scroll-wrapper .admin-tabs ~ .scroll-indicator {
+    height: 100%;
+    width: 30px;
+}
+
+.scroll-wrapper #ranking-table-container ~ .scroll-indicator,
+.scroll-wrapper #players-list .table-responsive ~ .scroll-indicator {
+    height: 60px;
+    width: 35px;
 }
 
 @media (max-width: 480px) {

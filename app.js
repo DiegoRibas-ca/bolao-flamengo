@@ -1,3 +1,12 @@
+/*
+ * Bolão Flamengo 2026 - Main Application Logic
+ * Versão: 1.0.0
+ * Última atualização: 2026-01-XX
+ * 
+ * Para forçar atualização do cache, altere a versão acima.
+ * Exemplo: Versão: 1.0.1
+ */
+
 // Função para exibir alertas usando Bootstrap Modal
 function showAlert(message, type = 'info', title = null) {
     const modal = document.getElementById('alertModal');
@@ -128,6 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     loadData();
     initBannerAnimation();
+    
+    // Inicializar indicadores de scroll após carregar
+    setTimeout(() => {
+        initScrollIndicators();
+    }, 500);
 });
 
 let isInitialized = false;
@@ -808,10 +822,7 @@ async function renderGames() {
             month: '2-digit', 
             year: 'numeric' 
         });
-        const timeStr = gameDate.toLocaleTimeString('pt-BR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
+        const timeStr = formatGameTime(game.date);
         
         const score = game.flamengoScore !== null 
             ? `${game.flamengoScore} x ${game.opponentScore}`
@@ -1045,6 +1056,71 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
+// Função para formatar data e hora com ambos os timezones (Rio de Janeiro e EST)
+function formatGameDateTime(gameDate) {
+    // Converter para Date se necessário
+    const date = gameDate?.toDate ? gameDate.toDate() : new Date(gameDate);
+    
+    // Formatar para Rio de Janeiro (America/Sao_Paulo)
+    const rioDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const rioTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    const rioDate = rioDateFormatter.format(date);
+    const rioTime = rioTimeFormatter.format(date);
+    const rioDateTime = `${rioDate} ${rioTime}`;
+    
+    // Formatar para EST (America/Toronto - Ontario, Canadá)
+    const estDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Toronto',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const estTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Toronto',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    const estDate = estDateFormatter.format(date);
+    const estTime = estTimeFormatter.format(date);
+    
+    // Se a data for a mesma, mostrar apenas hora EST, senão mostrar data e hora completas
+    if (rioDate === estDate) {
+        return `${rioDateTime} (${estTime} EST)`;
+    } else {
+        return `${rioDateTime} (${estDate} ${estTime} EST)`;
+    }
+}
+
+// Função para formatar apenas a hora com ambos os timezones
+function formatGameTime(gameDate) {
+    const date = gameDate?.toDate ? gameDate.toDate() : new Date(gameDate);
+    
+    // Hora do Rio de Janeiro
+    const rioTime = date.toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    // Hora EST
+    const estTime = date.toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Toronto',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    return `${rioTime} (${estTime} EST)`;
+}
+
 function openBetModal(gameId) {
     if (!currentUser) {
         showAlert('Faça login para fazer palpites', 'warning', 'Login Necessário');
@@ -1064,7 +1140,7 @@ function openBetModal(gameId) {
 
     document.getElementById('bet-game-info').innerHTML = `
         <strong>Flamengo vs ${game.opponent}</strong><br>
-        ${champ?.name || ''} - ${new Date(game.date).toLocaleString('pt-BR')}
+        ${champ?.name || ''} - ${formatGameDateTime(game.date)}
     `;
 
     // Limitar gols
@@ -1203,6 +1279,54 @@ function renderScorers(scorers) {
 }
 
 async function submitBet() {
+    // Validação extra: verificar status atual do jogo antes de salvar
+    // Isso previne que usuários salvem edições após o jogo mudar de status
+    // mesmo que o browser não tenha sido atualizado
+    if (!currentGameId) {
+        showAlert('Erro: ID do jogo não encontrado', 'error', 'Erro');
+        return;
+    }
+
+    let currentGame = games.find(g => g.id === currentGameId);
+    
+    // Se estiver online, buscar status atualizado do Firestore
+    if (db && currentGame) {
+        try {
+            const { doc, getDoc } = window.firebaseFunctions;
+            const gameDoc = await getDoc(doc(db, 'games', currentGameId));
+            if (gameDoc.exists()) {
+                const gameData = gameDoc.data();
+                currentGame = { ...currentGame, status: gameData.status };
+                
+                // Atualizar na lista local também
+                const gameIndex = games.findIndex(g => g.id === currentGameId);
+                if (gameIndex >= 0) {
+                    games[gameIndex].status = gameData.status;
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao verificar status do jogo:', error);
+            // Continuar com o jogo da lista local em caso de erro
+        }
+    }
+
+    // Verificar se o jogo está ao vivo ou finalizado
+    if (currentGame && (currentGame.status === 'live' || currentGame.status === 'finished')) {
+        showAlert(
+            `Este jogo está ${currentGame.status === 'live' ? 'ao vivo' : 'finalizado'}. Não é possível fazer ou alterar palpites.`,
+            'error',
+            'Jogo Indisponível'
+        );
+        // Fechar modal se estiver aberto
+        const betModal = document.getElementById('bet-modal');
+        if (betModal) {
+            betModal.style.display = 'none';
+        }
+        // Atualizar visualização dos jogos
+        renderGames();
+        return;
+    }
+
     const flamengoScore = parseInt(document.getElementById('bet-flamengo').value);
     const opponentScore = parseInt(document.getElementById('bet-opponent').value);
 
@@ -1349,7 +1473,7 @@ function renderBets() {
                 <div class="bet-card-header">
                     <div>
                         <strong>Flamengo vs ${game.opponent}</strong><br>
-                        <small>${champ?.name || ''} - ${new Date(game.date).toLocaleString('pt-BR')}</small>
+                        <small>${champ?.name || ''} - ${formatGameDateTime(game.date)}</small>
                     </div>
                 </div>
                 <div style="margin-top: 15px;">
@@ -1551,16 +1675,16 @@ function renderRanking(ranking) {
     tbody.innerHTML = ranking.map((item, index) => {
         const champScores = allChampionships.map(champ => {
             const score = item.championships[champ.id] || 0;
-            return `<td class="score-cell ${getScoreClass(score, ranking, champ.id)}" onclick="openParticipantCharts('${item.user.id}')" title="Clique para ver gráficos">${score.toFixed(2)}</td>`;
+            return `<td class="score-cell ${getScoreClass(score, ranking, champ.id)}">${score.toFixed(2)}</td>`;
         }).join('');
 
         return `
-            <tr>
+            <tr class="ranking-row-clickable" onclick="openParticipantCharts('${item.user.id}')" title="Clique para ver análise completa">
                 <td class="rank-cell">${index + 1}º</td>
                 <td class="player-name-cell">${item.user.name}</td>
                 <td class="trophy-cell">${'🏆'.repeat(item.cravudinhas)}</td>
                 ${champScores}
-                <td class="score-cell ${getScoreClass(item.total, ranking, 'total')}" onclick="openParticipantCharts('${item.user.id}')" title="Clique para ver gráficos">${item.total.toFixed(2)}</td>
+                <td class="score-cell ${getScoreClass(item.total, ranking, 'total')}">${item.total.toFixed(2)}</td>
             </tr>
         `;
     }).join('');
@@ -2060,6 +2184,11 @@ function loadAdminData() {
     renderAdminGames();
     renderPlayers();
     loadInvites();
+    
+    // Inicializar indicadores de scroll após carregar dados
+    setTimeout(() => {
+        initScrollIndicators();
+    }, 300);
 }
 
 function renderConfig() {
@@ -2121,6 +2250,11 @@ function renderConfig() {
             `).join('')}
         </div>
     `;
+    
+    // Inicializar indicadores de scroll após renderizar
+    setTimeout(() => {
+        initScrollIndicators();
+    }, 100);
 }
 
 async function saveConfig() {
@@ -2186,7 +2320,7 @@ function renderAdminGames() {
                 <div class="game-header">
                     <div>
                         <strong>Flamengo vs ${game.opponent}</strong><br>
-                        <small>${champ?.name || ''} - ${gameDate.toLocaleString('pt-BR')}</small>
+                        <small>${champ?.name || ''} - ${formatGameDateTime(game.date)}</small>
                         ${game.flamengoScore !== null ? `<br><small>Placar: ${score}</small>` : ''}
                     </div>
                     <div style="display: flex; gap: 10px;">
@@ -2592,9 +2726,8 @@ async function removeGame(gameId) {
         return;
     }
 
-    const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
     const champ = championships.find(c => c.id === game.championship);
-    const confirmMessage = `Tem certeza que deseja remover este jogo?\n\nFlamengo vs ${game.opponent}\n${champ?.name || ''} - ${gameDate.toLocaleString('pt-BR')}\n\n⚠️ Esta ação não pode ser desfeita!`;
+    const confirmMessage = `Tem certeza que deseja remover este jogo?\n\nFlamengo vs ${game.opponent}\n${champ?.name || ''} - ${formatGameDateTime(game.date)}\n\n⚠️ Esta ação não pode ser desfeita!`;
     
     if (!confirm(confirmMessage)) return;
 
@@ -2902,7 +3035,7 @@ function showImportPreview(games) {
                         const champ = championships.find(c => c.id === game.championship);
                         return `
                             <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 8px;">${game.date.toLocaleString('pt-BR')}</td>
+                                <td style="padding: 8px;">${formatGameDateTime(game.date)}</td>
                                 <td style="padding: 8px;">${champ?.name || game.championship}</td>
                                 <td style="padding: 8px;">${game.opponent}</td>
                             </tr>
@@ -3677,6 +3810,124 @@ function initBannerAnimation() {
             }
         }
     };
+}
+
+// Função para inicializar indicadores de scroll horizontal
+function initScrollIndicators() {
+    // Elementos com scroll horizontal
+    const scrollContainers = [
+        { element: document.getElementById('main-nav'), selector: '#main-nav' },
+        { element: document.querySelector('.admin-tabs'), selector: '.admin-tabs' },
+        { element: document.getElementById('ranking-table-container'), selector: '#ranking-table-container' },
+        { element: document.querySelector('#players-list .table-responsive'), selector: '#players-list .table-responsive' }
+    ];
+
+    scrollContainers.forEach(({ element, selector }) => {
+        if (!element) return;
+
+        // Remover indicadores existentes se houver
+        const existingIndicators = element.querySelectorAll('.scroll-indicator') || 
+                                   element.parentElement?.querySelectorAll('.scroll-indicator');
+        if (existingIndicators && existingIndicators.length > 0) {
+            existingIndicators.forEach(ind => ind.remove());
+        }
+
+        // Verificar se há scroll horizontal
+        const hasHorizontalScroll = element.scrollWidth > element.clientWidth;
+        
+        if (hasHorizontalScroll) {
+            // Garantir que o elemento tenha position relative para o absolute funcionar
+            if (getComputedStyle(element).position === 'static') {
+                element.style.position = 'relative';
+            }
+            
+            // Criar wrapper se não existir (para posicionar indicador fora do scroll)
+            let wrapper = element.parentElement;
+            if (!wrapper || !wrapper.classList.contains('scroll-wrapper')) {
+                // Criar wrapper ao redor do elemento
+                wrapper = document.createElement('div');
+                wrapper.className = 'scroll-wrapper';
+                wrapper.style.position = 'relative';
+                element.parentNode.insertBefore(wrapper, element);
+                wrapper.appendChild(element);
+            }
+            
+            // Criar indicador para direita
+            const indicatorRight = document.createElement('div');
+            indicatorRight.className = 'scroll-indicator scroll-indicator-right visible';
+            indicatorRight.innerHTML = '';
+            
+            // Criar indicador para esquerda
+            const indicatorLeft = document.createElement('div');
+            indicatorLeft.className = 'scroll-indicator scroll-indicator-left';
+            indicatorLeft.innerHTML = '';
+            
+            // Adicionar evento de clique para scroll suave (direita)
+            indicatorRight.addEventListener('click', () => {
+                const scrollAmount = window.innerWidth / 2; // Meia tela
+                element.scrollBy({
+                    left: scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            // Adicionar evento de clique para scroll suave (esquerda)
+            indicatorLeft.addEventListener('click', () => {
+                const scrollAmount = window.innerWidth / 2; // Meia tela
+                element.scrollBy({
+                    left: -scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            // Adicionar ao wrapper (não ao elemento que faz scroll)
+            wrapper.appendChild(indicatorRight);
+            wrapper.appendChild(indicatorLeft);
+
+            // Função para atualizar visibilidade dos indicadores
+            const updateIndicators = () => {
+                const isAtStart = element.scrollLeft <= 10;
+                const isAtEnd = element.scrollLeft + element.clientWidth >= element.scrollWidth - 10;
+                
+                // Indicador esquerdo
+                indicatorLeft.style.opacity = isAtStart ? '0' : '1';
+                indicatorLeft.style.pointerEvents = isAtStart ? 'none' : 'auto';
+                
+                // Indicador direito
+                indicatorRight.style.opacity = isAtEnd ? '0' : '1';
+                indicatorRight.style.pointerEvents = isAtEnd ? 'none' : 'auto';
+            };
+
+            element.addEventListener('scroll', updateIndicators);
+            updateIndicators();
+
+            // Atualizar ao redimensionar
+            let resizeTimeout;
+            const handleResize = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    const stillHasScroll = element.scrollWidth > element.clientWidth;
+                    indicatorRight.style.display = stillHasScroll ? 'flex' : 'none';
+                    indicatorLeft.style.display = stillHasScroll ? 'flex' : 'none';
+                    updateIndicators();
+                }, 250);
+            };
+            
+            window.addEventListener('resize', handleResize);
+            
+            // Observar mudanças no conteúdo para atualizar indicadores
+            const observer = new MutationObserver(() => {
+                setTimeout(() => {
+                    const stillHasScroll = element.scrollWidth > element.clientWidth;
+                    indicatorRight.style.display = stillHasScroll ? 'flex' : 'none';
+                    indicatorLeft.style.display = stillHasScroll ? 'flex' : 'none';
+                    updateIndicators();
+                }, 100);
+            });
+            
+            observer.observe(element, { childList: true, subtree: true });
+        }
+    });
 }
 
 // Funções de Perfil
