@@ -2467,18 +2467,51 @@ async function saveGame() {
 
 function renderPlayers() {
     const container = document.getElementById('players-list');
-    container.innerHTML = players.map(player => `
-        <div class="player-card">
-            <div>
-                <strong>${player.number ? `${player.number} - ` : ''}${player.name}</strong>
-                ${player.abbreviation ? `<span style="color: #666; font-size: 0.9em; margin-left: 8px;">(${player.abbreviation})</span>` : ''}
-            </div>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary btn-small" onclick="openPlayerModal('${player.id}')">Editar</button>
-                <button class="btn btn-danger btn-small" onclick="removePlayer('${player.id}')">Remover</button>
-            </div>
+    
+    if (players.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Nenhum jogador cadastrado ainda.</p>';
+        return;
+    }
+    
+    // Ordenar jogadores por número (se tiver) ou por nome
+    const sortedPlayers = [...players].sort((a, b) => {
+        if (a.number && b.number) {
+            return a.number - b.number;
+        }
+        if (a.number && !b.number) return -1;
+        if (!a.number && b.number) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+    
+    container.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col" style="width: 80px;">Número</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col" style="width: 120px;">Abreviação</th>
+                        <th scope="col" style="width: 180px;" class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sortedPlayers.map(player => `
+                        <tr>
+                            <td><strong>${player.number || '-'}</strong></td>
+                            <td>${player.name || '-'}</td>
+                            <td><code>${player.abbreviation || '-'}</code></td>
+                            <td class="text-end">
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="openPlayerModal('${player.id}')">Editar</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removePlayer('${player.id}')">Remover</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
-    `).join('');
+    `;
 }
 
 async function addPlayer() {

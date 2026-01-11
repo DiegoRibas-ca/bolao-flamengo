@@ -1,3 +1,12 @@
+/*
+ * Bolão Flamengo 2026 - Styles
+ * Versão: 1.0.0
+ * Última atualização: 2026-01-XX
+ * 
+ * Para forçar atualização do cache, altere a versão acima.
+ * Exemplo: Versão: 1.0.1
+ */
+
 * {
     margin: 0;
     padding: 0;
@@ -1491,134 +1500,134 @@ main {
     text-align: center;
 }
 
-.add-player-form {
-    display: grid;
-    grid-template-columns: 100px 1fr 100px auto;
-    gap: 20px;
+/* Formulário de adicionar jogador - usando Bootstrap grid */
+#players-tab .row.g-3 {
     margin-bottom: 30px;
-    padding: 30px;
+    padding: 25px;
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
     border-radius: 16px;
     border: 2px solid #e8e8e8;
     box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-    align-items: end;
 }
 
-.add-player-form .form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.add-player-form .form-field label {
+#players-tab .form-label {
     font-size: 13px;
     font-weight: 700;
     color: #333;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 0;
+    margin-bottom: 8px;
 }
 
-.add-player-form .form-field input {
-    width: 100%;
-    margin: 0;
-    padding: 14px 18px;
-    border: 2px solid #d0d0d0;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 500;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: white;
-    color: #333;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-
-.add-player-form .form-field input:hover {
-    border-color: #b0b0b0;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.06);
-}
-
-.add-player-form .form-field input:focus {
-    outline: none;
-    border-color: var(--flamengo-red);
-    box-shadow: 0 0 0 4px rgba(206, 17, 38, 0.15), 0 4px 12px rgba(206, 17, 38, 0.1);
-    transform: translateY(-2px);
-}
-
-.add-player-form .form-field input::placeholder {
-    color: #999;
-    font-weight: 400;
-}
-
-.add-player-form .form-field:first-child input {
+#players-tab #new-player-number {
     text-align: center;
     font-weight: 700;
     font-size: 16px;
     color: var(--flamengo-red);
 }
 
-.add-player-form .form-field:nth-child(3) input {
+#players-tab #new-player-abbreviation {
     text-align: center;
     font-weight: 700;
     letter-spacing: 3px;
     font-size: 16px;
-    color: #333;
 }
 
-.add-player-form .form-field-button {
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-end;
+/* Tabela de jogadores */
+#players-list {
+    margin-top: 20px;
 }
 
-.add-player-form .form-field-button button {
-    padding: 14px 32px;
+#players-list .table {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+#players-list .table thead {
+    background: linear-gradient(135deg, var(--flamengo-red) 0%, var(--flamengo-dark-red) 100%);
+    color: white;
+}
+
+#players-list .table thead th {
+    border: none;
+    padding: 15px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 14px;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(206, 17, 38, 0.3);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 12px;
+    letter-spacing: 0.5px;
 }
 
-.add-player-form .form-field-button button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(206, 17, 38, 0.4);
+#players-list .table tbody tr {
+    transition: all 0.2s;
+    border-bottom: 1px solid #f0f0f0;
 }
 
-.add-player-form .form-field-button button:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(206, 17, 38, 0.3);
+#players-list .table tbody tr:hover {
+    background: #f8f9fa;
+    transform: scale(1.01);
+    box-shadow: 0 2px 8px rgba(200, 16, 46, 0.1);
+}
+
+#players-list .table tbody td {
+    padding: 15px;
+    vertical-align: middle;
+    border-top: none;
+}
+
+#players-list .table tbody td code {
+    background: #f0f0f0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    color: var(--flamengo-red);
+    font-size: 13px;
+}
+
+#players-list .btn-group {
+    gap: 8px;
+}
+
+#players-list .btn-group .btn {
+    min-width: 80px;
 }
 
 @media (max-width: 768px) {
-    .add-player-form {
+    #players-tab .row.g-3 {
         padding: 20px;
     }
     
-    .add-player-form .row {
-        margin: 0;
-    }
-    
-    .add-player-form .col-12 {
+    #players-tab .row.g-3 .col-12 {
         margin-bottom: 15px;
     }
     
-    .invite-form .row {
-        margin: 0;
-    }
-    
-    .invite-form .col-12 {
-        margin-bottom: 15px;
-    }
-    
-    .add-player-form .form-field-button {
-        justify-content: stretch;
-    }
-    
-    .add-player-form .form-field-button button {
+    #players-tab #add-player-btn {
         width: 100%;
+    }
+    
+    #players-list .table-responsive {
+        overflow-x: auto;
+    }
+    
+    #players-list .table {
+        font-size: 14px;
+        min-width: 600px;
+    }
+    
+    #players-list .table thead th,
+    #players-list .table tbody td {
+        padding: 10px 8px;
+    }
+    
+    #players-list .btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    #players-list .btn-group .btn {
+        width: 100%;
+        min-width: auto;
     }
 }
 
