@@ -31,7 +31,7 @@ body {
     line-height: 1.6;
 }
 
-.container {
+.container-fluid {
     max-width: 1600px;
     margin: 0 auto;
     background: #ffffff;
@@ -39,16 +39,8 @@ body {
     box-shadow: var(--card-shadow);
     overflow: hidden;
     animation: fadeInUp 0.6s ease-out;
-}
-
-/* Em mobile, usar container-fluid para evitar paddings */
-@media (max-width: 768px) {
-    .container-mobile-fluid {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
+    padding-left: 0 !important;
+    padding-right: 0 !important;
 }
 
 @keyframes fadeInUp {
@@ -139,6 +131,56 @@ header h1 {
     position: relative;
     z-index: 1;
     margin: 0;
+}
+
+/* Flag de jogo ao vivo */
+.live-game-flag {
+    width: 100%;
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    animation: pulse-live 2s ease-in-out infinite;
+}
+
+.live-game-flag:hover {
+    background: linear-gradient(135deg, #ff3333 0%, #ff0000 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+.live-game-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.live-game-arrow {
+    font-size: 20px;
+    transition: transform 0.3s ease;
+}
+
+.live-game-flag:hover .live-game-arrow {
+    transform: translateX(5px);
+}
+
+@keyframes pulse-live {
+    0%, 100% {
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    50% {
+        box-shadow: 0 2px 15px rgba(255,0,0,0.6);
+    }
 }
 
 #main-nav {
@@ -2219,17 +2261,10 @@ main {
         padding: 0 !important;
     }
 
-    .container {
+    .container-fluid {
         border-radius: 0;
         margin: 0 !important;
         max-width: 100% !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
-    
-    /* Sobrescrever paddings do Bootstrap container em mobile */
-    .container,
-    .container-fluid {
         padding-left: 0 !important;
         padding-right: 0 !important;
     }
@@ -2274,6 +2309,15 @@ main {
 
     header h1 {
         font-size: 1.6em;
+    }
+
+    .live-game-flag {
+        padding: 10px 15px;
+        font-size: 14px;
+    }
+
+    .live-game-arrow {
+        font-size: 16px;
     }
 
     #main-nav {

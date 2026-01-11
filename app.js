@@ -222,6 +222,9 @@ function setupRealtimeListeners() {
         
         console.log(`[Games Listener] Total de jogos: ${games.length} (únicos: ${uniqueGames.length}, duplicatas removidas: ${newGames.length - uniqueGames.length})`);
         
+        // Atualizar flag de jogo ao vivo
+        updateLiveGameFlag();
+        
         if (document.getElementById('games-view').classList.contains('active')) {
             renderGames();
         }
@@ -417,6 +420,9 @@ function setupEventListeners() {
     document.getElementById('submit-bet')?.addEventListener('click', submitBet);
     document.getElementById('add-scorer-btn')?.addEventListener('click', addScorerInput);
     
+    // Live game flag
+    document.getElementById('live-game-flag')?.addEventListener('click', scrollToLiveGame);
+    
     // Profile
     document.getElementById('change-password-btn')?.addEventListener('click', () => {
         document.getElementById('change-password-modal').style.display = 'block';
@@ -455,6 +461,8 @@ function switchView(viewName) {
         calculateRanking(); // Função async, mas não precisa await aqui
     } else if (viewName === 'games') {
         renderGames();
+        // Atualizar flag após renderizar jogos
+        updateLiveGameFlag();
     } else if (viewName === 'my-bets' && currentUser) {
         loadUserBets();
         renderBets();
@@ -670,6 +678,84 @@ function updateUserUI() {
         profileNav.style.display = 'none';
         adminNav.style.display = 'none';
     }
+    
+    // Atualizar flag de jogo ao vivo
+    updateLiveGameFlag();
+}
+
+// Função para atualizar a flag de jogo ao vivo
+function updateLiveGameFlag() {
+    const liveGameFlag = document.getElementById('live-game-flag');
+    if (!liveGameFlag) return;
+    
+    // Verificar se há algum jogo com status 'live'
+    const liveGames = games.filter(game => game.status === 'live');
+    
+    if (liveGames.length > 0) {
+        // Mostrar flag
+        liveGameFlag.style.display = 'flex';
+    } else {
+        // Ocultar flag
+        liveGameFlag.style.display = 'none';
+    }
+}
+
+// Função para scroll até o jogo ao vivo quando clicar na flag
+function scrollToLiveGame() {
+    // Encontrar o primeiro jogo ao vivo
+    const liveGames = games.filter(game => game.status === 'live');
+    if (liveGames.length === 0) {
+        // Se não houver jogo ao vivo, apenas abrir a aba de jogos
+        switchView('games');
+        return;
+    }
+    
+    // Abrir a aba de jogos
+    switchView('games');
+    
+    // Aguardar um pouco para garantir que a view foi renderizada
+    setTimeout(() => {
+        // Encontrar o primeiro jogo ao vivo na lista renderizada
+        const firstLiveGame = liveGames[0];
+        const gameCard = document.getElementById(`game-${firstLiveGame.id}`);
+        
+        if (gameCard) {
+            // Fazer scroll suave até o card do jogo
+            gameCard.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+            
+            // Adicionar um destaque visual temporário
+            gameCard.style.transition = 'box-shadow 0.3s ease';
+            gameCard.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.5)';
+            setTimeout(() => {
+                gameCard.style.boxShadow = '';
+            }, 2000);
+        } else {
+            // Se o card não foi encontrado, pode estar filtrado
+            // Remover filtros temporariamente e tentar novamente
+            const statusFilter = document.getElementById('status-filter');
+            if (statusFilter && statusFilter.value !== '') {
+                statusFilter.value = '';
+                renderGames();
+                setTimeout(() => {
+                    const gameCardRetry = document.getElementById(`game-${firstLiveGame.id}`);
+                    if (gameCardRetry) {
+                        gameCardRetry.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'center' 
+                        });
+                        gameCardRetry.style.transition = 'box-shadow 0.3s ease';
+                        gameCardRetry.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.5)';
+                        setTimeout(() => {
+                            gameCardRetry.style.boxShadow = '';
+                        }, 2000);
+                    }
+                }, 300);
+            }
+        }
+    }, 300);
 }
 
 async function loadData() {
@@ -858,7 +944,7 @@ async function renderGames() {
         };
 
         return `
-            <div class="game-card">
+            <div class="game-card" id="game-${game.id}" data-game-id="${game.id}">
                 <div class="game-card-header">
                     <div class="game-teams-container">
                         <span class="game-team home-team">Flamengo</span>
@@ -1010,6 +1096,9 @@ async function renderGames() {
             </div>
         `;
     }).join('');
+    
+    // Atualizar flag de jogo ao vivo após renderizar
+    updateLiveGameFlag();
 }
 
 function getFilteredGames() {
