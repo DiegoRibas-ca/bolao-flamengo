@@ -231,6 +231,10 @@ function setupRealtimeListeners() {
         if (document.getElementById('ranking-view').classList.contains('active')) {
             calculateRanking(); // Função async
         }
+        // Atualizar palpites quando jogos são modificados (placar ou marcadores)
+        if (document.getElementById('my-bets-view').classList.contains('active')) {
+            renderBets();
+        }
     });
     unsubscribeFunctions.games = unsubscribeGames;
 
@@ -1541,21 +1545,68 @@ function renderBets() {
         return;
     }
 
-    container.innerHTML = bets.map(bet => {
+    // Ordenar palpites por data do jogo (mais recentes primeiro)
+    const sortedBets = [...bets].sort((a, b) => {
+        const gameA = games.find(g => g.id === a.gameId);
+        const gameB = games.find(g => g.id === b.gameId);
+        if (!gameA || !gameB) return 0;
+        const dateA = gameA.date?.toDate ? gameA.date.toDate() : new Date(gameA.date);
+        const dateB = gameB.date?.toDate ? gameB.date.toDate() : new Date(gameB.date);
+        return dateB - dateA; // Mais recentes primeiro
+    });
+
+    container.innerHTML = sortedBets.map(bet => {
         const game = games.find(g => g.id === bet.gameId);
         if (!game) return '';
 
         const champ = championships.find(c => c.id === game.championship);
-        const result = game.status === 'finished' 
+        const result = game.status === 'finished' && game.flamengoScore !== null
             ? calculatePoints(bet, game)
             : null;
 
         const scorersText = bet.scorers && bet.scorers.length > 0
             ? bet.scorers.map(sId => {
                 const player = players.find(p => p.id === sId);
-                return player ? player.name : 'Desconhecido';
+                return player ? (player.abbreviation || player.name) : 'Desconhecido';
             }).join(', ')
             : 'Nenhum marcador selecionado';
+
+        // Renderizar breakdown de pontos se o jogo estiver finalizado
+        let pointsBreakdownHtml = '';
+        if (result && game.status === 'finished' && game.flamengoScore !== null) {
+            const details = result.breakdownDetails;
+            const hasAnyPoints = details.exactScore > 0 || details.correctResult > 0 || 
+                                 details.correctGoals > 0 || details.correctScorers > 0;
+            
+            pointsBreakdownHtml = `
+                <div class="bet-points-section">
+                    <div class="bet-points-header">
+                        <h4>Pontos Conquistados</h4>
+                        <div class="bet-points-total ${result.points > 0 ? 'points-positive' : 'points-zero'}">
+                            Total: <strong>${result.points.toFixed(1)}</strong>
+                        </div>
+                    </div>
+                    <div class="bet-points-breakdown">
+                        <div class="breakdown-item ${details.exactScore > 0 ? 'has-points' : 'no-points'}">
+                            <span class="breakdown-label">Placar Exato:</span>
+                            <span class="breakdown-value">${details.exactScore.toFixed(1)}</span>
+                        </div>
+                        <div class="breakdown-item ${details.correctResult > 0 ? 'has-points' : 'no-points'}">
+                            <span class="breakdown-label">Resultado:</span>
+                            <span class="breakdown-value">${details.correctResult.toFixed(1)}</span>
+                        </div>
+                        <div class="breakdown-item ${details.correctGoals > 0 ? 'has-points' : 'no-points'}">
+                            <span class="breakdown-label">Gols de um Time:</span>
+                            <span class="breakdown-value">${details.correctGoals.toFixed(1)}</span>
+                        </div>
+                        <div class="breakdown-item ${details.correctScorers > 0 ? 'has-points' : 'no-points'}">
+                            <span class="breakdown-label">Marcadores:</span>
+                            <span class="breakdown-value">${details.correctScorers.toFixed(1)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
         return `
             <div class="bet-card">
@@ -1564,21 +1615,25 @@ function renderBets() {
                         <strong>Flamengo vs ${game.opponent}</strong><br>
                         <small>${champ?.name || ''} - ${formatGameDateTime(game.date)}</small>
                     </div>
+                    ${game.status === 'finished' ? '<span class="game-status-badge status-finished">Finalizado</span>' : ''}
                 </div>
-                <div style="margin-top: 15px;">
-                    <strong>Seu palpite:</strong> ${bet.flamengoScore} x ${bet.opponentScore}
-                </div>
-                <div class="bet-scorers-list">
-                    <strong>Marcadores:</strong> ${scorersText}
-                </div>
-                ${game.status === 'finished' ? `
-                    <div style="margin-top: 10px;">
-                        <strong>Placar real:</strong> ${game.flamengoScore} x ${game.opponentScore}
+                <div class="bet-details-section">
+                    <div class="bet-detail-row">
+                        <span class="bet-detail-label">Seu palpite:</span>
+                        <span class="bet-detail-value">${bet.flamengoScore} x ${bet.opponentScore}</span>
                     </div>
-                    <div style="margin-top: 5px; color: ${result.points > 0 ? 'green' : 'red'}; font-weight: bold;">
-                        Pontos: ${result.points} (${result.breakdown})
+                    ${game.status === 'finished' && game.flamengoScore !== null ? `
+                        <div class="bet-detail-row">
+                            <span class="bet-detail-label">Placar real:</span>
+                            <span class="bet-detail-value">${game.flamengoScore} x ${game.opponentScore}</span>
+                        </div>
+                    ` : ''}
+                    <div class="bet-detail-row">
+                        <span class="bet-detail-label">Marcadores:</span>
+                        <span class="bet-detail-value">${scorersText}</span>
                     </div>
-                ` : ''}
+                </div>
+                ${pointsBreakdownHtml}
             </div>
         `;
     }).join('');
@@ -1591,12 +1646,20 @@ function calculatePoints(bet, game) {
 
     let points = 0;
     const breakdown = [];
+    const breakdownDetails = {
+        exactScore: 0,
+        correctResult: 0,
+        correctGoals: 0,
+        correctScorers: 0
+    };
     let hasScoredMainCriteria = false; // Flag para indicar se já pontuou por um dos 3 critérios principais
 
     // 1. Cravar resultado (placar exato) - PRIORIDADE MÁXIMA
     // Se acertou o placar exato, NÃO pode pontuar por resultado ou gols de um time
     if (bet.flamengoScore === game.flamengoScore && bet.opponentScore === game.opponentScore) {
-        points += weights.exactScore * champWeight;
+        const exactScorePoints = weights.exactScore * champWeight;
+        points += exactScorePoints;
+        breakdownDetails.exactScore = exactScorePoints;
         breakdown.push('Placar exato');
         hasScoredMainCriteria = true; // Já pontuou, não pode pontuar pelos outros critérios
     }
@@ -1610,7 +1673,9 @@ function calculatePoints(bet, game) {
                           game.flamengoScore < game.opponentScore ? 'loss' : 'draw';
         
         if (betResult === gameResult) {
-            points += weights.correctResult * champWeight;
+            const resultPoints = weights.correctResult * champWeight;
+            points += resultPoints;
+            breakdownDetails.correctResult = resultPoints;
             breakdown.push('Resultado');
             hasScoredMainCriteria = true; // Já pontuou, não pode pontuar por gols de um time
         }
@@ -1628,6 +1693,7 @@ function calculatePoints(bet, game) {
         }
         if (goalsPoints > 0) {
             points += goalsPoints;
+            breakdownDetails.correctGoals = goalsPoints;
             breakdown.push('Gols de um time');
             hasScoredMainCriteria = true;
         }
@@ -1640,13 +1706,15 @@ function calculatePoints(bet, game) {
         if (correctScorers > 0) {
             const scorersPoints = correctScorers * weights.correctScorers * champWeight;
             points += scorersPoints;
+            breakdownDetails.correctScorers = scorersPoints;
             breakdown.push(`${correctScorers} marcador(es)`);
         }
     }
 
     return {
         points: points,
-        breakdown: breakdown.join(', ') || 'Nenhum ponto'
+        breakdown: breakdown.join(', ') || 'Nenhum ponto',
+        breakdownDetails: breakdownDetails
     };
 }
 
@@ -2669,6 +2737,18 @@ async function saveGame() {
             showAlert('Jogo salvo com sucesso!', 'success', 'Sucesso');
             document.getElementById('game-modal').style.display = 'none';
             currentGameId = null;
+            
+            // Recalcular ranking e atualizar palpites quando um jogo é editado
+            // Isso garante que mudanças no placar ou marcadores sejam refletidas
+            if (document.getElementById('ranking-view').classList.contains('active')) {
+                calculateRanking();
+            }
+            if (document.getElementById('my-bets-view').classList.contains('active')) {
+                renderBets();
+            }
+            if (document.getElementById('games-view').classList.contains('active')) {
+                renderGames();
+            }
         } catch (error) {
             console.error('Erro ao salvar jogo:', error);
             showAlert('Erro ao salvar jogo. Verifique o console para mais detalhes.', 'error', 'Erro');
