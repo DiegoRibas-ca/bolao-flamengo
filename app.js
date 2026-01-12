@@ -1336,7 +1336,7 @@ function formatGameTime(gameDate) {
         hour12: true
     });
     
-    return `${rioTime} BRA (${estTime} EST)`;
+    return `${rioTime} BRA<br>(${estTime} EST)`;
 }
 
 function openBetModal(gameId) {
@@ -1662,6 +1662,42 @@ async function loadUserBets() {
     }
 }
 
+// Função helper para criar tooltip de marcador
+function createScorerTooltip(playerId, abbreviation) {
+    const player = players.find(p => p.id === playerId);
+    if (!player) return abbreviation;
+    
+    const playerName = player.name || 'Desconhecido';
+    const playerNumber = player.number ? `#${player.number}` : '';
+    const tooltipText = playerNumber ? `${playerName} ${playerNumber}` : playerName;
+    
+    return `
+        <span class="scorer-with-tooltip">
+            <span class="scorer-abbreviation">${abbreviation}</span>
+            <span class="scorer-tooltip-icon" data-tooltip="${tooltipText}">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="6" cy="6" r="5" stroke="#000000" stroke-width="1.5" fill="white"/>
+                    <text x="6" y="7.5" font-size="6" font-weight="bold" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif">i</text>
+                </svg>
+            </span>
+            <span class="scorer-tooltip-text">${tooltipText}</span>
+        </span>
+    `;
+}
+
+// Função helper para formatar marcadores com tooltips
+function formatScorersWithTooltips(scorerIds) {
+    if (!scorerIds || scorerIds.length === 0) return 'Nenhum marcador';
+    
+    return scorerIds.map(sId => {
+        const player = players.find(p => p.id === sId);
+        if (!player) return '?';
+        
+        const abbreviation = player.abbreviation || player.name || '?';
+        return createScorerTooltip(sId, abbreviation);
+    }).join(', ');
+}
+
 function renderBets() {
     const container = document.getElementById('bets-list');
     
@@ -1670,17 +1706,17 @@ function renderBets() {
         return;
     }
 
-    // Ordenar palpites por data do jogo (mais recentes primeiro)
+    // Ordenar palpites por data do jogo (mais recentes primeiro - decrescente)
     const sortedBets = [...bets].sort((a, b) => {
         const gameA = games.find(g => g.id === a.gameId);
         const gameB = games.find(g => g.id === b.gameId);
         if (!gameA || !gameB) return 0;
         const dateA = gameA.date?.toDate ? gameA.date.toDate() : new Date(gameA.date);
         const dateB = gameB.date?.toDate ? gameB.date.toDate() : new Date(gameB.date);
-        return dateB - dateA; // Mais recentes primeiro
+        return dateB - dateA; // Mais recentes primeiro (decrescente)
     });
 
-    container.innerHTML = sortedBets.map(bet => {
+    container.innerHTML = sortedBets.map((bet, index) => {
         const game = games.find(g => g.id === bet.gameId);
         if (!game) return '';
 
@@ -1689,19 +1725,25 @@ function renderBets() {
             ? calculatePoints(bet, game)
             : null;
 
-        const scorersText = bet.scorers && bet.scorers.length > 0
-            ? bet.scorers.map(sId => {
-                const player = players.find(p => p.id === sId);
-                return player ? (player.abbreviation || player.name) : 'Desconhecido';
-            }).join(', ')
-            : 'Nenhum marcador selecionado';
+        // Primeiro jogo (index 0) expandido por padrão
+        const isExpanded = index === 0;
+        const accordionId = `bet-accordion-${bet.id}`;
+        const contentId = `bet-content-${bet.id}`;
+
+        // Formatar marcadores do palpite com tooltips
+        const betScorersHtml = bet.scorers && bet.scorers.length > 0
+            ? formatScorersWithTooltips(bet.scorers)
+            : '<span style="color: #999;">Nenhum marcador selecionado</span>';
+
+        // Formatar marcadores reais do jogo com tooltips
+        const gameScorersHtml = game.scorers && game.scorers.length > 0
+            ? formatScorersWithTooltips(game.scorers)
+            : '<span style="color: #999;">Nenhum marcador registrado</span>';
 
         // Renderizar breakdown de pontos se o jogo estiver finalizado
         let pointsBreakdownHtml = '';
         if (result && game.status === 'finished' && game.flamengoScore !== null) {
             const details = result.breakdownDetails;
-            const hasAnyPoints = details.exactScore > 0 || details.correctResult > 0 || 
-                                 details.correctGoals > 0 || details.correctScorers > 0;
             
             pointsBreakdownHtml = `
                 <div class="bet-points-section">
@@ -1733,35 +1775,123 @@ function renderBets() {
             `;
         }
 
+        const statusBadge = game.status === 'finished' 
+            ? '<span class="game-status-badge status-finished">Finalizado</span>'
+            : game.status === 'live'
+            ? '<span class="game-status-badge status-live">Ao vivo</span>'
+            : '<span class="game-status-badge status-upcoming">Próximo</span>';
+
         return `
-            <div class="bet-card">
-                <div class="bet-card-header">
-                    <div>
-                        <strong>Flamengo vs ${game.opponent}</strong><br>
-                        <small>${champ?.name || ''} - ${formatGameDateTime(game.date)}</small>
-                    </div>
-                    ${game.status === 'finished' ? '<span class="game-status-badge status-finished">Finalizado</span>' : ''}
-                </div>
-                <div class="bet-details-section">
-                    <div class="bet-detail-row">
-                        <span class="bet-detail-label">Seu palpite:</span>
-                        <span class="bet-detail-value">${bet.flamengoScore} x ${bet.opponentScore}</span>
-                    </div>
-                    ${game.status === 'finished' && game.flamengoScore !== null ? `
-                        <div class="bet-detail-row">
-                            <span class="bet-detail-label">Placar real:</span>
-                            <span class="bet-detail-value">${game.flamengoScore} x ${game.opponentScore}</span>
+            <div class="bet-accordion" id="${accordionId}">
+                <div class="bet-accordion-header ${isExpanded ? 'expanded' : ''}" onclick="toggleBetAccordion('${bet.id}')">
+                    <div class="bet-accordion-header-content">
+                        <div>
+                            <strong>Flamengo vs ${game.opponent}</strong><br>
+                            <small>${champ?.name || ''} - ${formatGameDateTime(game.date)}</small>
                         </div>
-                    ` : ''}
-                    <div class="bet-detail-row">
-                        <span class="bet-detail-label">Marcadores:</span>
-                        <span class="bet-detail-value">${scorersText}</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="bet-accordion-arrow ${isExpanded ? 'expanded' : ''}">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
                     </div>
                 </div>
-                ${pointsBreakdownHtml}
+                <div class="bet-accordion-content ${isExpanded ? 'expanded' : ''}" id="${contentId}">
+                    <div class="bet-details-section">
+                        <div class="bet-detail-row">
+                            <span class="bet-detail-label">Seu palpite:</span>
+                            <span class="bet-detail-value">${bet.flamengoScore} x ${bet.opponentScore}</span>
+                        </div>
+                        ${bet.scorers && bet.scorers.length > 0 ? `
+                            <div class="bet-detail-row">
+                                <span class="bet-detail-label">Marcadores do palpite:</span>
+                                <span class="bet-detail-value">${betScorersHtml}</span>
+                            </div>
+                        ` : ''}
+                        ${game.status === 'finished' && game.flamengoScore !== null ? `
+                            <div class="bet-detail-row">
+                                <span class="bet-detail-label">Placar real:</span>
+                                <span class="bet-detail-value">${game.flamengoScore} x ${game.opponentScore}</span>
+                            </div>
+                            ${game.scorers && game.scorers.length > 0 ? `
+                                <div class="bet-detail-row">
+                                    <span class="bet-detail-label">Marcadores reais:</span>
+                                    <span class="bet-detail-value">${gameScorersHtml}</span>
+                                </div>
+                            ` : ''}
+                        ` : ''}
+                    </div>
+                    ${pointsBreakdownHtml}
+                </div>
             </div>
         `;
     }).join('');
+    
+    // Adicionar event listeners para tooltips após renderizar
+    setTimeout(() => {
+        setupScorerTooltips();
+    }, 100);
+}
+
+// Função para toggle do acordeão
+function toggleBetAccordion(betId) {
+    const accordion = document.getElementById(`bet-accordion-${betId}`);
+    const content = document.getElementById(`bet-content-${betId}`);
+    const header = accordion.querySelector('.bet-accordion-header');
+    const arrow = accordion.querySelector('.bet-accordion-arrow');
+    
+    const isExpanded = content.classList.contains('expanded');
+    
+    if (isExpanded) {
+        content.classList.remove('expanded');
+        header.classList.remove('expanded');
+        arrow.classList.remove('expanded');
+    } else {
+        content.classList.add('expanded');
+        header.classList.add('expanded');
+        arrow.classList.add('expanded');
+    }
+}
+
+// Função para configurar tooltips de marcadores
+function setupScorerTooltips() {
+    const tooltipIcons = document.querySelectorAll('.scorer-tooltip-icon');
+    
+    tooltipIcons.forEach(icon => {
+        const tooltip = icon.nextElementSibling;
+        
+        // Para mobile: toggle no click
+        icon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isActive = tooltip.classList.contains('active');
+            
+            // Fechar todos os outros tooltips
+            document.querySelectorAll('.scorer-tooltip-text').forEach(t => {
+                if (t !== tooltip) t.classList.remove('active');
+            });
+            
+            tooltip.classList.toggle('active', !isActive);
+        });
+        
+        // Para desktop: hover
+        icon.addEventListener('mouseenter', () => {
+            tooltip.classList.add('active');
+        });
+        
+        icon.addEventListener('mouseleave', () => {
+            tooltip.classList.remove('active');
+        });
+    });
+    
+    // Fechar tooltips ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.scorer-with-tooltip')) {
+            document.querySelectorAll('.scorer-tooltip-text').forEach(t => {
+                t.classList.remove('active');
+            });
+        }
+    });
 }
 
 function calculatePoints(bet, game) {
@@ -4585,3 +4715,4 @@ window.openPlayerModal = openPlayerModal;
 window.removeGame = removeGame;
 window.openParticipantCharts = openParticipantCharts;
 window.openResetPasswordModal = openResetPasswordModal;
+window.toggleBetAccordion = toggleBetAccordion;

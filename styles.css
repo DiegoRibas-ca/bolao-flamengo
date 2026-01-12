@@ -1965,7 +1965,99 @@ main {
     border-bottom: 2px solid #e8e8e8;
 }
 
-/* Bet Cards */
+/* Bet Cards - Acordeão */
+.bet-accordion {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 2px solid #e8e8e8;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    transition: all 0.3s;
+    overflow: hidden;
+}
+
+.bet-accordion:hover {
+    border-color: var(--flamengo-red);
+    box-shadow: 0 8px 24px rgba(200, 16, 46, 0.15);
+}
+
+.bet-accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    cursor: pointer;
+    transition: all 0.3s;
+    user-select: none;
+    gap: 20px; /* Espaço entre conteúdo e seta */
+}
+
+.bet-accordion-header:hover {
+    background: rgba(200, 16, 46, 0.05);
+}
+
+.bet-accordion-header.expanded {
+    border-bottom: 2px solid #e8e8e8;
+}
+
+.bet-accordion-header-content {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+.bet-accordion-header-content > div {
+    flex: 1;
+}
+
+.bet-accordion-header-content strong {
+    font-size: 18px;
+    color: #333;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.bet-accordion-header-content small {
+    font-size: 14px;
+    color: #666;
+}
+
+.bet-accordion-arrow {
+    width: 40px;
+    height: 40px;
+    min-width: 40px; /* Garantir espaço mínimo */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--flamengo-red);
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+    margin-left: auto; /* Empurrar para a direita */
+}
+
+.bet-accordion-arrow.expanded {
+    transform: rotate(180deg);
+}
+
+.bet-accordion-arrow svg {
+    width: 24px;
+    height: 24px;
+}
+
+.bet-accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.3s ease;
+    padding: 0 25px;
+}
+
+.bet-accordion-content.expanded {
+    max-height: 2000px;
+    padding: 20px 25px;
+}
+
+/* Bet Cards (legado - manter para compatibilidade) */
 .bet-card {
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
     border: 2px solid #e8e8e8;
@@ -2175,6 +2267,103 @@ main {
 .game-status-badge.status-finished {
     background: #6c757d;
     color: white;
+}
+
+.game-status-badge.status-live {
+    background: #dc3545;
+    color: white;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.game-status-badge.status-upcoming {
+    background: #17a2b8;
+    color: white;
+}
+
+/* Tooltips de Marcadores */
+.scorer-with-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-right: 4px;
+    vertical-align: middle;
+    gap: 2px;
+}
+
+.scorer-abbreviation {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.4;
+}
+
+.scorer-tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    position: relative;
+    z-index: 10;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-left: 1px;
+    vertical-align: middle;
+}
+
+.scorer-tooltip-icon:hover {
+    transform: scale(1.1);
+}
+
+.scorer-tooltip-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.scorer-tooltip-text {
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scorer-tooltip-text::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.95);
+}
+
+.scorer-tooltip-text.active {
+    opacity: 1;
+    transform: translateX(-50%);
+    pointer-events: auto;
+}
+
+/* Ajuste para quebra de linha no horário */
+.game-detail-value {
+    line-height: 1.6;
 }
 
 /* Spinner */
@@ -2709,6 +2898,58 @@ main {
 
     .bet-detail-value {
         text-align: left;
+    }
+
+    /* Acordeões de palpites responsivos */
+    .bet-accordion-header {
+        padding: 15px 18px;
+        gap: 15px;
+    }
+
+    .bet-accordion-header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .bet-accordion-header-content strong {
+        font-size: 16px;
+    }
+
+    .bet-accordion-header-content small {
+        font-size: 13px;
+    }
+
+    .bet-accordion-content.expanded {
+        padding: 15px 18px;
+    }
+
+    .bet-accordion-arrow {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        align-self: flex-start;
+        margin-top: 0;
+    }
+
+    .bet-accordion-arrow svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Tooltips responsivos */
+    .scorer-tooltip-text {
+        font-size: 11px;
+        padding: 5px 8px;
+        max-width: 200px;
+        white-space: normal;
+        word-wrap: break-word;
+        bottom: calc(100% + 4px);
+    }
+
+    .scorer-tooltip-icon {
+        width: 16px;
+        height: 16px;
     }
 
     /* Choices.js responsivo */
