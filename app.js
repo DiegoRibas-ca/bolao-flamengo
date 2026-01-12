@@ -1559,6 +1559,17 @@ async function submitBet() {
         return;
     }
 
+    // Validar máximo de gols por time
+    const maxGoals = config.maxGoals || 20;
+    if (flamengoScore > maxGoals || opponentScore > maxGoals) {
+        showAlert(
+            `O número de gols de um dos times não pode ultrapassar <strong>${maxGoals} gols</strong>.<br><br>Você inseriu: Flamengo ${flamengoScore} x ${opponentScore} Adversário.<br>Por favor, ajuste os placares.`,
+            'error',
+            'Limite de Gols Excedido'
+        );
+        return;
+    }
+
     // Coletar marcadores (compatível com Choices.js)
     const scorerSelects = document.querySelectorAll('#scorers-list select');
     const scorers = Array.from(scorerSelects)
@@ -3025,6 +3036,29 @@ async function saveGame() {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
         showAlert('Hora ou minuto inválidos. Hora deve ser entre 0-23 e minuto entre 0-59', 'error', 'Validação');
         return;
+    }
+    
+    // Validar placares se fornecidos
+    if (flamengoScore || opponentScore) {
+        const flamengoScoreInt = flamengoScore ? parseInt(flamengoScore) : 0;
+        const opponentScoreInt = opponentScore ? parseInt(opponentScore) : 0;
+        
+        // Validar que os placares são números válidos e não negativos
+        if (flamengoScoreInt < 0 || opponentScoreInt < 0) {
+            showAlert('Os placares não podem ser negativos', 'error', 'Erro de Validação');
+            return;
+        }
+        
+        // Validar máximo de gols por time
+        const maxGoals = config.maxGoals || 20;
+        if (flamengoScoreInt > maxGoals || opponentScoreInt > maxGoals) {
+            showAlert(
+                `O número de gols de um dos times não pode ultrapassar <strong>${maxGoals} gols</strong>.<br><br>Você inseriu: Flamengo ${flamengoScoreInt} x ${opponentScoreInt} Adversário.<br>Por favor, ajuste os placares.`,
+                'error',
+                'Limite de Gols Excedido'
+            );
+            return;
+        }
     }
     
     // Criar data no timezone do Rio de Janeiro
