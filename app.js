@@ -121,11 +121,42 @@ let config = {
         correctGoals: 2,     // Acertar número de gols de um time
         correctScorers: 5    // Acertar marcadores (por gol)
     },
-    championshipWeights: {   // Pesos por campeonato (controlados pelo admin)
-        brasileirao: 3,
-        libertadores: 5,
-        copa_brasil: 4,
-        mundial: 6
+    // Pesos por campeonato e fase (estrutura: championshipPhaseWeights[campeonato][fase])
+    // O peso "regular" de cada campeonato é o que era o peso do campeonato anteriormente
+    // Valores baseados na database atual:
+    // - Brasileirão: regular = 1
+    // - Carioca: regular = 0.5
+    // - Recopa: regular = 1.5
+    // - Supercopa do Rei: regular = 1.5
+    championshipPhaseWeights: {
+        brasileirao: {
+            regular: 1,
+            oitavas: 1.5,
+            quartas: 1.75,
+            semi: 2,
+            final: 3
+        },
+        carioca: {
+            regular: 0.5,
+            oitavas: 0.75,
+            quartas: 0.875,
+            semi: 1,
+            final: 1.5
+        },
+        recopa: {
+            regular: 1.5,
+            oitavas: 2.25,
+            quartas: 2.625,
+            semi: 3,
+            final: 4.5
+        },
+        supercopa: {
+            regular: 1.5,
+            oitavas: 2.25,
+            quartas: 2.625,
+            semi: 3,
+            final: 4.5
+        }
     }
 };
 let db = null;
@@ -202,11 +233,17 @@ function setupRealtimeListeners() {
     // Escutar jogos
     const unsubscribeGames = onSnapshot(collection(db, 'games'), (snapshot) => {
         // Mapear documentos para jogos
-        const newGames = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(doc.data().date)
-        }));
+        const newGames = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+                homeAway: data.homeAway || 'mandante', // Fallback para mandante
+                phase: data.phase || 'regular', // Fallback para regular
+                location: data.location || null // Opcional
+            };
+        });
         
         // Remover duplicatas por ID (manter apenas o primeiro)
         const uniqueGames = [];
@@ -284,6 +321,55 @@ function setupRealtimeListeners() {
     const unsubscribeConfig = onSnapshot(collection(db, 'config'), (snapshot) => {
         if (!snapshot.empty) {
             const configDoc = snapshot.docs[0].data();
+            
+            // Migração: se tiver estrutura antiga (championshipWeights + phaseWeights), converter para nova estrutura
+            if (configDoc.championshipWeights && configDoc.phaseWeights && !configDoc.championshipPhaseWeights) {
+                console.log('[Config] Migrando estrutura antiga para nova...');
+                console.log('[Config] championshipWeights encontrados:', configDoc.championshipWeights);
+                console.log('[Config] phaseWeights encontrados:', configDoc.phaseWeights);
+                
+                const championshipPhaseWeights = {};
+                
+                // Para cada campeonato, criar pesos por fase
+                // O peso "regular" é o peso base do campeonato (não multiplicado)
+                // As outras fases são multiplicadas pelo peso base
+                Object.keys(configDoc.championshipWeights).forEach(champId => {
+                    const baseWeight = configDoc.championshipWeights[champId]; // Este é o peso "regular"
+                    const phaseWeights = configDoc.phaseWeights;
+                    
+                    // O peso regular é o próprio peso base (não multiplica por phaseWeights.regular)
+                    // As outras fases multiplicam o peso base pelo multiplicador da fase
+                    championshipPhaseWeights[champId] = {
+                        regular: baseWeight, // Peso base do campeonato (equivalente ao antigo championshipWeights)
+                        oitavas: baseWeight * (phaseWeights.oitavas || 1.5),
+                        quartas: baseWeight * (phaseWeights.quartas || 1.75),
+                        semi: baseWeight * (phaseWeights.semi || 2),
+                        final: baseWeight * (phaseWeights.final || 3)
+                    };
+                    
+                    console.log(`[Config] ${champId}: regular=${championshipPhaseWeights[champId].regular}, oitavas=${championshipPhaseWeights[champId].oitavas}, quartas=${championshipPhaseWeights[champId].quartas}, semi=${championshipPhaseWeights[champId].semi}, final=${championshipPhaseWeights[champId].final}`);
+                });
+                
+                configDoc.championshipPhaseWeights = championshipPhaseWeights;
+                console.log('[Config] Migração concluída:', championshipPhaseWeights);
+                
+                // Salvar a nova estrutura no Firestore (opcional, mas recomendado)
+                // Isso garante que na próxima vez não precise migrar novamente
+                try {
+                    const { setDoc, doc } = window.firebaseFunctions;
+                    setDoc(doc(db, 'config', 'main'), {
+                        ...configDoc,
+                        championshipPhaseWeights: championshipPhaseWeights
+                    }, { merge: true }).then(() => {
+                        console.log('[Config] Nova estrutura salva no Firestore');
+                    }).catch(err => {
+                        console.error('[Config] Erro ao salvar nova estrutura:', err);
+                    });
+                } catch (error) {
+                    console.error('[Config] Erro ao tentar salvar migração:', error);
+                }
+            }
+            
             config = { ...config, ...configDoc };
             if (document.getElementById('config-tab').classList.contains('active')) {
                 renderConfig();
@@ -947,13 +1033,36 @@ async function renderGames() {
             }).join(', ');
         };
 
+        // Determinar posição dos times baseado no mando de campo
+        const homeAway = game.homeAway || 'mandante'; // Fallback para mandante
+        const isHome = homeAway === 'mandante';
+        const leftTeam = isHome ? 'Flamengo' : game.opponent;
+        const rightTeam = isHome ? game.opponent : 'Flamengo';
+        
+        // Formatar fase
+        const phaseMap = {
+            'regular': 'Regular',
+            'oitavas': 'Oitavas',
+            'quartas': 'Quartas',
+            'semi': 'Semi',
+            'final': 'Final'
+        };
+        const phase = game.phase || 'regular'; // Fallback para regular
+        const phaseText = phaseMap[phase] || 'Regular';
+        
+        // Formatar mando de campo
+        const homeAwayText = isHome ? 'Mandante' : 'Visitante';
+        
+        // Formatar local
+        const locationText = game.location || 'A definir';
+        
         return `
             <div class="game-card" id="game-${game.id}" data-game-id="${game.id}">
                 <div class="game-card-header">
                     <div class="game-teams-container">
-                        <span class="game-team home-team">Flamengo</span>
+                        <span class="game-team ${isHome ? 'home-team' : 'away-team'}">${leftTeam}</span>
                         <span class="game-vs">vs</span>
-                        <span class="game-team away-team">${game.opponent}</span>
+                        <span class="game-team ${isHome ? 'away-team' : 'home-team'}">${rightTeam}</span>
                     </div>
                     <div class="game-status status-${game.status}">
                         ${getStatusText(game.status)}
@@ -972,6 +1081,18 @@ async function renderGames() {
                     <div class="game-detail-item">
                         <span class="game-detail-label">🏆 Campeonato:</span>
                         <span class="game-detail-value">${champ?.name || 'N/A'}</span>
+                    </div>
+                    <div class="game-detail-item">
+                        <span class="game-detail-label">📍 Local:</span>
+                        <span class="game-detail-value">${locationText}</span>
+                    </div>
+                    <div class="game-detail-item">
+                        <span class="game-detail-label">🏟️ Mando:</span>
+                        <span class="game-detail-value">${homeAwayText}</span>
+                    </div>
+                    <div class="game-detail-item">
+                        <span class="game-detail-label">🎯 Fase:</span>
+                        <span class="game-detail-value">${phaseText}</span>
                     </div>
                     <div class="game-detail-item">
                         <span class="game-detail-label">⚽ Placar:</span>
@@ -1645,8 +1766,21 @@ function renderBets() {
 
 function calculatePoints(bet, game) {
     const champId = game.championship;
-    const champWeight = config.championshipWeights[champId] || 1;
+    const phase = game.phase || 'regular'; // Fallback para regular
     const weights = config.weights;
+    
+    // Obter peso específico do campeonato e fase
+    // Se não existir, usar fallback: primeiro tenta o campeonato com fase regular, depois usa 1
+    let totalMultiplier = 1;
+    if (config.championshipPhaseWeights && config.championshipPhaseWeights[champId]) {
+        const champPhases = config.championshipPhaseWeights[champId];
+        totalMultiplier = champPhases[phase] || champPhases.regular || 1;
+    } else if (config.championshipWeights && config.championshipWeights[champId]) {
+        // Migração: se ainda tiver a estrutura antiga, calcular baseado no peso antigo
+        const oldChampWeight = config.championshipWeights[champId];
+        const oldPhaseWeight = (config.phaseWeights && config.phaseWeights[phase]) || 1;
+        totalMultiplier = oldChampWeight * oldPhaseWeight;
+    }
 
     let points = 0;
     const breakdown = [];
@@ -1661,7 +1795,7 @@ function calculatePoints(bet, game) {
     // 1. Cravar resultado (placar exato) - PRIORIDADE MÁXIMA
     // Se acertou o placar exato, NÃO pode pontuar por resultado ou gols de um time
     if (bet.flamengoScore === game.flamengoScore && bet.opponentScore === game.opponentScore) {
-        const exactScorePoints = weights.exactScore * champWeight;
+        const exactScorePoints = weights.exactScore * totalMultiplier;
         points += exactScorePoints;
         breakdownDetails.exactScore = exactScorePoints;
         breakdown.push('Placar exato');
@@ -1677,7 +1811,7 @@ function calculatePoints(bet, game) {
                           game.flamengoScore < game.opponentScore ? 'loss' : 'draw';
         
         if (betResult === gameResult) {
-            const resultPoints = weights.correctResult * champWeight;
+            const resultPoints = weights.correctResult * totalMultiplier;
             points += resultPoints;
             breakdownDetails.correctResult = resultPoints;
             breakdown.push('Resultado');
@@ -1690,10 +1824,10 @@ function calculatePoints(bet, game) {
     if (!hasScoredMainCriteria) {
         let goalsPoints = 0;
         if (bet.flamengoScore === game.flamengoScore) {
-            goalsPoints += weights.correctGoals * champWeight;
+            goalsPoints += weights.correctGoals * totalMultiplier;
         }
         if (bet.opponentScore === game.opponentScore) {
-            goalsPoints += weights.correctGoals * champWeight;
+            goalsPoints += weights.correctGoals * totalMultiplier;
         }
         if (goalsPoints > 0) {
             points += goalsPoints;
@@ -1708,7 +1842,7 @@ function calculatePoints(bet, game) {
     if (game.scorers && game.scorers.length > 0 && bet.scorers && bet.scorers.length > 0) {
         const correctScorers = bet.scorers.filter(sId => game.scorers.includes(sId)).length;
         if (correctScorers > 0) {
-            const scorersPoints = correctScorers * weights.correctScorers * champWeight;
+            const scorersPoints = correctScorers * weights.correctScorers * totalMultiplier;
             points += scorersPoints;
             breakdownDetails.correctScorers = scorersPoints;
             breakdown.push(`${correctScorers} marcador(es)`);
@@ -2369,7 +2503,7 @@ function renderConfig() {
 
         <div class="config-section">
             <h3>📊 Pesos de Pontuação Base</h3>
-            <p class="config-description">Estes são os pesos base que serão multiplicados pelo peso do campeonato</p>
+            <p class="config-description">Estes são os pesos base que serão multiplicados pelo peso específico do campeonato e fase configurado abaixo</p>
             <div class="config-item">
                 <label>
                     <strong>Placar Exato</strong><br>
@@ -2401,14 +2535,50 @@ function renderConfig() {
         </div>
 
         <div class="config-section">
-            <h3>🏆 Pesos por Campeonato</h3>
-            <p class="config-description">Multiplicador aplicado aos pesos base acima</p>
-            ${championships.map(champ => `
-                <div class="config-item">
-                    <label>${champ.name}:</label>
-                    <input type="number" id="config-champ-${champ.id}" value="${config.championshipWeights[champ.id] || 1}" min="1" step="0.5">
-                </div>
-            `).join('')}
+            <h3>🏆 Pesos por Campeonato e Fase</h3>
+            <p class="config-description">Configure os pesos específicos para cada fase de cada campeonato. O peso "Regular" de cada campeonato é o peso base (equivalente ao peso do campeonato anterior).</p>
+            ${championships.map(champ => {
+                // Valores padrão baseados nos campeonatos reais da database
+                const defaultPhases = {
+                    brasileirao: { regular: 1, oitavas: 1.5, quartas: 1.75, semi: 2, final: 3 },
+                    carioca: { regular: 0.5, oitavas: 0.75, quartas: 0.875, semi: 1, final: 1.5 },
+                    recopa: { regular: 1.5, oitavas: 2.25, quartas: 2.625, semi: 3, final: 4.5 },
+                    supercopa: { regular: 1.5, oitavas: 2.25, quartas: 2.625, semi: 3, final: 4.5 }
+                };
+                
+                const champPhases = config.championshipPhaseWeights?.[champ.id] || defaultPhases[champ.id] || {
+                    regular: 1,
+                    oitavas: 1.5,
+                    quartas: 1.75,
+                    semi: 2,
+                    final: 3
+                };
+                return `
+                    <div class="championship-phase-config" style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 12px; border: 2px solid #e0e0e0;">
+                        <h4 style="margin-bottom: 15px; color: var(--primary-color);">${champ.name}</h4>
+                        <div class="config-item">
+                            <label>Fase Regular:</label>
+                            <input type="number" id="config-${champ.id}-regular" value="${champPhases.regular || 1}" min="0.5" step="0.1">
+                        </div>
+                        <div class="config-item">
+                            <label>Oitavas de Final:</label>
+                            <input type="number" id="config-${champ.id}-oitavas" value="${champPhases.oitavas || 1.5}" min="0.5" step="0.1">
+                        </div>
+                        <div class="config-item">
+                            <label>Quartas de Final:</label>
+                            <input type="number" id="config-${champ.id}-quartas" value="${champPhases.quartas || 1.75}" min="0.5" step="0.1">
+                        </div>
+                        <div class="config-item">
+                            <label>Semifinal:</label>
+                            <input type="number" id="config-${champ.id}-semi" value="${champPhases.semi || 2}" min="0.5" step="0.1">
+                        </div>
+                        <div class="config-item">
+                            <label>Final:</label>
+                            <input type="number" id="config-${champ.id}-final" value="${champPhases.final || 3}" min="0.5" step="0.1">
+                        </div>
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
     
@@ -2419,11 +2589,16 @@ function renderConfig() {
 }
 
 async function saveConfig() {
-    // Coletar pesos dos campeonatos
-    const championshipWeights = {};
+    // Coletar pesos por campeonato e fase
+    const championshipPhaseWeights = {};
     championships.forEach(champ => {
-        const weight = parseFloat(document.getElementById(`config-champ-${champ.id}`).value);
-        championshipWeights[champ.id] = weight;
+        championshipPhaseWeights[champ.id] = {
+            regular: parseFloat(document.getElementById(`config-${champ.id}-regular`).value) || 1,
+            oitavas: parseFloat(document.getElementById(`config-${champ.id}-oitavas`).value) || 1.5,
+            quartas: parseFloat(document.getElementById(`config-${champ.id}-quartas`).value) || 1.75,
+            semi: parseFloat(document.getElementById(`config-${champ.id}-semi`).value) || 2,
+            final: parseFloat(document.getElementById(`config-${champ.id}-final`).value) || 3
+        };
     });
 
     const newConfig = {
@@ -2434,7 +2609,7 @@ async function saveConfig() {
             correctGoals: parseInt(document.getElementById('config-correct-goals').value),
             correctScorers: parseInt(document.getElementById('config-correct-scorers').value)
         },
-        championshipWeights: championshipWeights
+        championshipPhaseWeights: championshipPhaseWeights
     };
 
     config = { ...config, ...newConfig };
@@ -2515,6 +2690,9 @@ function openGameModal(gameId = null) {
     if (game) {
         document.getElementById('game-championship').value = game.championship;
         document.getElementById('game-opponent').value = game.opponent;
+        document.getElementById('game-location').value = game.location || '';
+        document.getElementById('game-home-away').value = game.homeAway || 'mandante';
+        document.getElementById('game-phase').value = game.phase || 'regular';
         
         // Converter data do jogo para timezone do Rio de Janeiro e preencher campos
         const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
@@ -2553,6 +2731,9 @@ function openGameModal(gameId = null) {
     } else {
         document.getElementById('game-championship').value = '';
         document.getElementById('game-opponent').value = '';
+        document.getElementById('game-location').value = '';
+        document.getElementById('game-home-away').value = 'mandante';
+        document.getElementById('game-phase').value = 'regular';
         document.getElementById('game-date-input').value = '';
         document.getElementById('game-hour-input').value = '';
         document.getElementById('game-minute-input').value = '';
@@ -2762,6 +2943,11 @@ async function saveGame() {
         return;
     }
 
+    // Coletar novos campos
+    const location = document.getElementById('game-location').value.trim() || null;
+    const homeAway = document.getElementById('game-home-away').value || 'mandante'; // Fallback para mandante
+    const phase = document.getElementById('game-phase').value || 'regular'; // Fallback para regular
+    
     const gameData = {
         championship,
         opponent,
@@ -2769,7 +2955,10 @@ async function saveGame() {
         status,
         flamengoScore: flamengoScore ? parseInt(flamengoScore) : null,
         opponentScore: opponentScore ? parseInt(opponentScore) : null,
-        scorers: scorers
+        scorers: scorers,
+        location: location, // Opcional
+        homeAway: homeAway, // Obrigatório, mas com fallback
+        phase: phase // Obrigatório, mas com fallback
     };
 
     if (db) {
@@ -3217,6 +3406,14 @@ function parseImportData() {
         // Mapear competição
         const champId = championshipMapping[competition] || competition.toLowerCase().replace(/\s+/g, '_');
 
+        // Determinar mando de campo baseado na posição do Flamengo
+        let homeAway = 'mandante'; // Fallback padrão
+        if (homeTeam && homeTeam.toLowerCase().includes('flamengo')) {
+            homeAway = 'mandante';
+        } else if (awayTeam && awayTeam.toLowerCase().includes('flamengo')) {
+            homeAway = 'visitante';
+        }
+
         parsedGames.push({
             date: gameDate,
             championship: champId,
@@ -3226,6 +3423,9 @@ function parseImportData() {
             flamengoScore: null,
             opponentScore: null,
             scorers: [],
+            location: null, // Opcional, não vem da planilha
+            homeAway: homeAway, // Mandante ou visitante
+            phase: 'regular', // Fallback para regular
             originalData: line // Para debug
         });
     });

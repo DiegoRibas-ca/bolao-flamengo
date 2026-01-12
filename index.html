@@ -361,6 +361,26 @@
                 <option value="">Selecione o campeonato</option>
             </select>
             <input type="text" id="game-opponent" placeholder="Adversário" required>
+            <input type="text" id="game-location" placeholder="Local do jogo (opcional)">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="game-home-away" style="display: block; margin-bottom: 5px; font-weight: 600;">Mando de Campo</label>
+                    <select id="game-home-away" required>
+                        <option value="mandante">Mandante</option>
+                        <option value="visitante">Visitante</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="game-phase" style="display: block; margin-bottom: 5px; font-weight: 600;">Fase</label>
+                    <select id="game-phase" required>
+                        <option value="regular">Regular</option>
+                        <option value="oitavas">Oitavas</option>
+                        <option value="quartas">Quartas</option>
+                        <option value="semi">Semi</option>
+                        <option value="final">Final</option>
+                    </select>
+                </div>
+            </div>
             <div class="date-time-inputs">
                 <label style="display: block; margin-bottom: 8px; font-weight: 600;">Data e Hora do Jogo (Horário do Rio de Janeiro)</label>
                 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: end;">
