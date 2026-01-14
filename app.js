@@ -967,11 +967,17 @@ async function renderGames() {
     
     console.log(`[renderGames] Renderizando ${uniqueFilteredGames.length} jogos únicos`);
 
-    // Buscar todos os palpites de jogos que estão ao vivo ou finalizados
+    // Identificar o próximo jogo (primeiro jogo com status "upcoming")
+    const nextGame = uniqueFilteredGames.find(g => g.status === 'upcoming');
+    
+    // Buscar todos os palpites de jogos que estão ao vivo ou finalizados, e também do próximo jogo
     const liveOrFinishedGames = uniqueFilteredGames.filter(g => g.status === 'live' || g.status === 'finished');
+    const gamesToFetchBets = nextGame 
+        ? [...liveOrFinishedGames, nextGame]
+        : liveOrFinishedGames;
     const allBetsMap = {}; // Mapa: gameId -> array de palpites
     
-    if (liveOrFinishedGames.length > 0 && db) {
+    if (gamesToFetchBets.length > 0 && db) {
         try {
             const { collection, getDocs } = window.firebaseFunctions;
             // Buscar todos os palpites de uma vez
@@ -982,7 +988,7 @@ async function renderGames() {
             }));
             
             // Agrupar palpites por gameId
-            liveOrFinishedGames.forEach(game => {
+            gamesToFetchBets.forEach(game => {
                 allBetsMap[game.id] = allBetsData.filter(b => b.gameId === game.id);
             });
         } catch (error) {
@@ -1013,6 +1019,48 @@ async function renderGames() {
         const allGameBets = (game.status === 'live' || game.status === 'finished') 
             ? (allBetsMap[game.id] || [])
             : [];
+        
+        // Verificar se é o próximo jogo e buscar usuários sem palpite
+        const isNextGame = nextGame && game.id === nextGame.id;
+        let missingBetsSection = '';
+        
+        if (isNextGame && game.status === 'upcoming') {
+            // Buscar todos os palpites deste jogo (do Firestore e local)
+            const nextGameBetsFromFirestore = allBetsMap[game.id] || [];
+            const nextGameBetsFromLocal = bets.filter(b => b.gameId === game.id);
+            
+            // Combinar palpites (remover duplicatas por userId)
+            const allNextGameBets = [...nextGameBetsFromFirestore];
+            nextGameBetsFromLocal.forEach(localBet => {
+                if (!allNextGameBets.find(b => b.userId === localBet.userId)) {
+                    allNextGameBets.push(localBet);
+                }
+            });
+            
+            const usersWithBets = new Set(allNextGameBets.map(b => b.userId));
+            
+            // Identificar usuários sem palpite
+            const usersWithoutBets = users.filter(u => !usersWithBets.has(u.id));
+            
+            if (usersWithoutBets.length > 0) {
+                const missingNames = usersWithoutBets
+                    .map(u => u.name || 'Participante')
+                    .sort((a, b) => a.localeCompare(b));
+                
+                missingBetsSection = `
+                    <div class="missing-bets-section">
+                        <div class="missing-bets-header">
+                            <span class="missing-bets-label">⏳ Ainda falta palpite de:</span>
+                        </div>
+                        <div class="missing-bets-list">
+                            ${missingNames.map(name => `
+                                <span class="missing-bet-name">${name}</span>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
 
         // Formatar marcadores do palpite do usuário
         let betScorersText = '';
@@ -1122,6 +1170,7 @@ async function renderGames() {
                             `}
                         </div>
                     ` : ''}
+                    ${missingBetsSection}
                 ` : `
                     <div class="all-bets-section">
                         <div class="all-bets-header">
