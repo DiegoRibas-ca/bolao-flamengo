@@ -689,6 +689,28 @@ main {
 .game-detail-value.game-score {
     font-size: 1.3em;
     font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.game-detail-value.game-score .team-initials {
+    font-weight: 800;
+}
+
+.game-detail-value.game-score .flamengo-initials {
+    color: var(--flamengo-red);
+}
+
+.game-detail-value.game-score .opponent-initials {
+    color: #000000;
+}
+
+.game-detail-value.game-score .score-number {
+    color: var(--flamengo-red);
+}
+
+.game-detail-value.game-score .score-separator {
     color: var(--flamengo-red);
 }
 
@@ -752,6 +774,30 @@ main {
 .game-bet-score {
     font-size: 1.5em;
     font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.game-bet-score .team-initials {
+    font-weight: 900;
+}
+
+.game-bet-score .flamengo-initials {
+    color: #856404;
+    text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
+}
+
+.game-bet-score .opponent-initials {
+    color: #000000;
+}
+
+.game-bet-score .score-number {
+    color: #856404;
+    text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
+}
+
+.game-bet-score .score-separator {
     color: #856404;
     text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
 }
@@ -918,11 +964,9 @@ main {
 
 .participant-bet-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 8px;
     margin-bottom: 12px;
-    flex-wrap: wrap;
-    gap: 10px;
 }
 
 .participant-name {
@@ -932,6 +976,7 @@ main {
     display: flex;
     align-items: center;
     gap: 6px;
+    width: 100%;
 }
 
 .participant-name.you-label {
@@ -943,12 +988,52 @@ main {
 .participant-bet-score {
     font-size: 1.4em;
     font-weight: 900;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.participant-bet-score .team-initials {
+    font-weight: 900;
+}
+
+.participant-bet-score .flamengo-initials {
     color: var(--flamengo-red);
     text-shadow: 1px 1px 2px rgba(200, 16, 46, 0.2);
 }
 
-.participant-bet-card.current-user-bet .participant-bet-score {
+.participant-bet-score .opponent-initials {
+    color: #000000;
+}
+
+.participant-bet-score .score-number {
+    color: var(--flamengo-red);
+    text-shadow: 1px 1px 2px rgba(200, 16, 46, 0.2);
+}
+
+.participant-bet-score .score-separator {
+    color: var(--flamengo-red);
+    text-shadow: 1px 1px 2px rgba(200, 16, 46, 0.2);
+}
+
+.participant-bet-card.current-user-bet .participant-bet-score .flamengo-initials {
     color: #856404;
+    text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
+}
+
+.participant-bet-card.current-user-bet .participant-bet-score .score-number {
+    color: #856404;
+    text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
+}
+
+.participant-bet-card.current-user-bet .participant-bet-score .score-separator {
+    color: #856404;
+    text-shadow: 1px 1px 2px rgba(133, 100, 4, 0.2);
+}
+
+.participant-bet-card.current-user-bet .participant-bet-score .opponent-initials {
+    color: #000000;
 }
 
 .participant-bet-scorers {
@@ -2209,6 +2294,29 @@ main {
     color: #666;
     font-size: 14px;
     text-align: right;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.bet-detail-value .team-initials {
+    font-weight: 700;
+}
+
+.bet-detail-value .flamengo-initials {
+    color: var(--flamengo-red);
+}
+
+.bet-detail-value .opponent-initials {
+    color: #000000;
+}
+
+.bet-detail-value .score-number {
+    color: var(--flamengo-red);
+}
+
+.bet-detail-value .score-separator {
+    color: var(--flamengo-red);
 }
 
 /* Seção de pontos */

@@ -535,6 +535,34 @@ function setupEventListeners() {
         document.getElementById('reset-password-error').style.display = 'none';
         window.resetPasswordUserId = null;
     });
+    
+    // Admin - Delete User
+    document.getElementById('submit-delete-user')?.addEventListener('click', deleteUser);
+    document.getElementById('cancel-delete-user')?.addEventListener('click', () => {
+        document.getElementById('delete-user-modal').style.display = 'none';
+        document.getElementById('delete-user-error').style.display = 'none';
+        window.deleteUserId = null;
+    });
+    
+    // Fechar modais ao clicar no X
+    document.querySelectorAll('.modal .close').forEach(closeBtn => {
+        closeBtn.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                modal.style.display = 'none';
+                // Limpar campos e erros
+                const errorEl = modal.querySelector('.error-message');
+                if (errorEl) errorEl.style.display = 'none';
+                if (modal.id === 'reset-password-modal') {
+                    document.getElementById('reset-password-new').value = '';
+                    document.getElementById('reset-password-confirm').value = '';
+                    window.resetPasswordUserId = null;
+                } else if (modal.id === 'delete-user-modal') {
+                    window.deleteUserId = null;
+                }
+            }
+        });
+    });
 }
 
 function switchView(viewName) {
@@ -1006,9 +1034,11 @@ async function renderGames() {
         });
         const timeStr = formatGameTime(game.date);
         
-        const score = game.flamengoScore !== null 
-            ? `${game.flamengoScore} x ${game.opponentScore}`
-            : 'A definir';
+        // Formatar placar respeitando mando de campo
+        const gameScore = game.flamengoScore !== null 
+            ? formatScoreByHomeAway(game)
+            : null;
+        const score = gameScore ? gameScore.formatted : 'A definir';
 
         // Buscar palpite do usuário atual para este jogo
         const userBet = currentUser ? bets.find(b => b.gameId === game.id && b.userId === currentUser.id) : null;
@@ -1154,7 +1184,7 @@ async function renderGames() {
                             ${userBet ? `
                                 <div class="game-bet-header">
                                     <span class="game-bet-label">🎯 Seu Palpite:</span>
-                                    <span class="game-bet-score">${userBet.flamengoScore} x ${userBet.opponentScore}</span>
+                                    <span class="game-bet-score">${formatScoreByHomeAway(game, userBet).formatted}</span>
                                 </div>
                                 ${betScorersText ? `
                                     <div class="game-bet-scorers">
@@ -1218,13 +1248,14 @@ async function renderGames() {
                                         `;
                                     }
                                     
+                                    const betScore = formatScoreByHomeAway(game, bet);
                                     return `
                                         <div class="participant-bet-card ${isCurrentUser ? 'current-user-bet' : ''}">
                                             <div class="participant-bet-header">
                                                 <span class="participant-name ${isCurrentUser ? 'you-label' : ''}">
                                                     ${isCurrentUser ? '👤 Você' : `👤 ${userName}`}
                                                 </span>
-                                                <span class="participant-bet-score">${bet.flamengoScore} x ${bet.opponentScore}</span>
+                                                <span class="participant-bet-score">${betScore.formatted}</span>
                                             </div>
                                             ${betScorers ? `
                                                 <div class="participant-bet-scorers">
@@ -1296,11 +1327,18 @@ function getFilteredGames() {
         return champMatch && statusMatch;
     });
 
-    // Ordenar por data crescente (mais antigos primeiro)
+    // Ordenar por data: se há filtro por status, ordem descending (mais recentes primeiro)
+    // Caso contrário, ordem crescente (mais antigos primeiro)
     filtered.sort((a, b) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
-        return dateA - dateB;
+        if (statusFilter) {
+            // Com filtro por status: descending (mais recentes primeiro)
+            return dateB - dateA;
+        } else {
+            // Sem filtro: crescente (mais antigos primeiro)
+            return dateA - dateB;
+        }
     });
 
     return filtered;
@@ -1386,6 +1424,67 @@ function formatGameTime(gameDate) {
     });
     
     return `${rioTime} BRA<br>(${estTime} EST)`;
+}
+
+// Função helper para obter as 3 primeiras letras de um time em uppercase
+function getTeamInitials(teamName) {
+    if (!teamName) return '???';
+    // Remover espaços e pegar as 3 primeiras letras
+    const cleaned = teamName.replace(/\s+/g, '').toUpperCase();
+    return cleaned.substring(0, 3) || '???';
+}
+
+// Função helper para formatar placar respeitando mando de campo
+// Retorna objeto com leftScore, rightScore, leftInitials, rightInitials
+function formatScoreByHomeAway(game, bet = null) {
+    const homeAway = game.homeAway || 'mandante';
+    const isHome = homeAway === 'mandante';
+    
+    // Determinar qual time fica à esquerda e qual à direita
+    const leftTeamName = isHome ? 'Flamengo' : game.opponent;
+    const rightTeamName = isHome ? game.opponent : 'Flamengo';
+    
+    // Obter iniciais
+    const leftInitials = getTeamInitials(leftTeamName);
+    const rightInitials = getTeamInitials(rightTeamName);
+    
+    // Obter placares
+    let leftScore, rightScore;
+    if (bet) {
+        // Para palpites: usar flamengoScore e opponentScore do palpite
+        leftScore = isHome ? bet.flamengoScore : bet.opponentScore;
+        rightScore = isHome ? bet.opponentScore : bet.flamengoScore;
+    } else {
+        // Para jogos: usar flamengoScore e opponentScore do jogo
+        leftScore = isHome ? game.flamengoScore : game.opponentScore;
+        rightScore = isHome ? game.opponentScore : game.flamengoScore;
+    }
+    
+    // Verificar se os placares são null/undefined
+    if (leftScore === null || leftScore === undefined || rightScore === null || rightScore === undefined) {
+        return {
+            leftScore: null,
+            rightScore: null,
+            leftInitials,
+            rightInitials,
+            formatted: 'A definir'
+        };
+    }
+    
+    // Determinar qual time é Flamengo para aplicar cor vermelha
+    const leftIsFlamengo = leftTeamName === 'Flamengo';
+    const rightIsFlamengo = rightTeamName === 'Flamengo';
+    
+    // Criar HTML formatado com cores diferentes
+    const formatted = `<span class="team-initials ${leftIsFlamengo ? 'flamengo-initials' : 'opponent-initials'}">${leftInitials}</span> <span class="score-number">${leftScore}</span> <span class="score-separator">x</span> <span class="score-number">${rightScore}</span> <span class="team-initials ${rightIsFlamengo ? 'flamengo-initials' : 'opponent-initials'}">${rightInitials}</span>`;
+    
+    return {
+        leftScore,
+        rightScore,
+        leftInitials,
+        rightInitials,
+        formatted
+    };
 }
 
 function openBetModal(gameId) {
@@ -1861,7 +1960,7 @@ function renderBets() {
                     <div class="bet-details-section">
                         <div class="bet-detail-row">
                             <span class="bet-detail-label">Seu palpite:</span>
-                            <span class="bet-detail-value">${bet.flamengoScore} x ${bet.opponentScore}</span>
+                            <span class="bet-detail-value">${formatScoreByHomeAway(game, bet).formatted}</span>
                         </div>
                         ${bet.scorers && bet.scorers.length > 0 ? `
                             <div class="bet-detail-row">
@@ -1872,7 +1971,7 @@ function renderBets() {
                         ${game.status === 'finished' && game.flamengoScore !== null ? `
                             <div class="bet-detail-row">
                                 <span class="bet-detail-label">Placar real:</span>
-                                <span class="bet-detail-value">${game.flamengoScore} x ${game.opponentScore}</span>
+                                <span class="bet-detail-value">${formatScoreByHomeAway(game).formatted}</span>
                             </div>
                             ${game.scorers && game.scorers.length > 0 ? `
                                 <div class="bet-detail-row">
@@ -2769,6 +2868,7 @@ function renderConfig() {
                     </div>
                 `;
             }).join('')}
+            
         </div>
     `;
     
@@ -2839,7 +2939,7 @@ function renderAdminGames() {
         const champ = championships.find(c => c.id === game.championship);
         const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
         const score = game.flamengoScore !== null 
-            ? `${game.flamengoScore} x ${game.opponentScore}`
+            ? formatScoreByHomeAway(game).formatted
             : 'A definir';
         return `
             <div class="game-card">
@@ -4708,10 +4808,15 @@ async function loadUsers() {
                             <small class="invite-email">${user.email || 'Sem email'}</small>
                             ${acceptedBadge}
                         </div>
-                        <div style="margin-top: 10px;">
+                        <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
                             <button class="btn btn-secondary btn-small" onclick="window.openResetPasswordModal('${user.id}', '${user.name || user.email}')">
                                 🔑 Resetar Senha
                             </button>
+                            ${!user.isAdmin ? `
+                                <button class="btn btn-danger btn-small" onclick="window.openDeleteUserModal('${user.id}', '${(user.name || user.email).replace(/'/g, "\\'")}')">
+                                    🗑️ Deletar Participante
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -4724,6 +4829,7 @@ async function loadUsers() {
 }
 
 window.resetPasswordUserId = null;
+window.deleteUserId = null;
 
 function openResetPasswordModal(userId, userName) {
     window.resetPasswordUserId = userId;
@@ -4790,6 +4896,62 @@ async function resetUserPassword() {
     }
 }
 
+function openDeleteUserModal(userId, userName) {
+    window.deleteUserId = userId;
+    document.getElementById('delete-user-title').textContent = `Deletar Participante - ${userName}`;
+    document.getElementById('delete-user-info').textContent = `Tem certeza que deseja deletar o participante "${userName}"? Esta ação é irreversível e irá deletar todos os palpites deste participante.`;
+    document.getElementById('delete-user-error').style.display = 'none';
+    document.getElementById('delete-user-modal').style.display = 'block';
+}
+
+async function deleteUser() {
+    if (!currentUser?.isAdmin || !db || !window.deleteUserId) {
+        showAlert('Erro: operação não autorizada', 'error', 'Acesso Negado');
+        return;
+    }
+    
+    const userId = window.deleteUserId;
+    const errorEl = document.getElementById('delete-user-error');
+    
+    try {
+        const { collection, getDocs, doc, deleteDoc, query, where } = window.firebaseFunctions;
+        
+        // 1. Deletar todos os palpites do usuário
+        const betsQuery = query(collection(db, 'bets'), where('userId', '==', userId));
+        const betsSnapshot = await getDocs(betsQuery);
+        
+        const deletePromises = [];
+        betsSnapshot.forEach(betDoc => {
+            deletePromises.push(deleteDoc(doc(db, 'bets', betDoc.id)));
+        });
+        
+        await Promise.all(deletePromises);
+        console.log(`[deleteUser] ${deletePromises.length} palpites deletados para o usuário ${userId}`);
+        
+        // 2. Deletar o usuário
+        await deleteDoc(doc(db, 'users', userId));
+        console.log(`[deleteUser] Usuário ${userId} deletado com sucesso`);
+        
+        // Fechar modal
+        document.getElementById('delete-user-modal').style.display = 'none';
+        window.deleteUserId = null;
+        
+        // Recarregar lista de usuários
+        await loadUsers();
+        
+        // Mostrar mensagem de sucesso
+        showAlert(
+            `O participante e todos os seus palpites foram deletados com sucesso.`,
+            'success',
+            'Participante Deletado'
+        );
+    } catch (error) {
+        console.error('Erro ao deletar usuário:', error);
+        errorEl.textContent = `Erro ao deletar participante: ${error.message}`;
+        errorEl.style.display = 'block';
+    }
+}
+
 // Expor funções globalmente
 window.openBetModal = openBetModal;
 window.openGameModal = openGameModal;
@@ -4798,4 +4960,6 @@ window.openPlayerModal = openPlayerModal;
 window.removeGame = removeGame;
 window.openParticipantCharts = openParticipantCharts;
 window.openResetPasswordModal = openResetPasswordModal;
+window.openDeleteUserModal = openDeleteUserModal;
+window.deleteUser = deleteUser;
 window.toggleBetAccordion = toggleBetAccordion;

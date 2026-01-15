@@ -540,6 +540,30 @@
         </div>
     </div>
 
+    <!-- Modal: Deletar Participante (Admin) -->
+    <div id="delete-user-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header-custom">
+                <h2 id="delete-user-title">Deletar Participante</h2>
+                <span class="close">&times;</span>
+            </div>
+            <p class="help-text" id="delete-user-info"></p>
+            <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                <strong>⚠️ Atenção:</strong> Esta ação é <strong>irreversível</strong> e irá:
+                <ul style="margin: 10px 0 0 20px; padding: 0;">
+                    <li>Deletar o usuário do sistema</li>
+                    <li>Deletar todos os palpites deste participante</li>
+                    <li>Não afetar os palpites de outros participantes</li>
+                </ul>
+            </div>
+            <p id="delete-user-error" class="error-message" style="display: none;"></p>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="submit-delete-user" class="btn btn-danger">Confirmar Deletar</button>
+                <button id="cancel-delete-user" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script type="module">
       // Importar configuração do Firebase
