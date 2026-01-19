@@ -2273,8 +2273,17 @@ function renderRanking(ranking) {
         `;
     }).join('');
     
+    // Inicializar filtros de campeonato
+    initializeChampionshipFilters();
+    
+    // Configurar event listeners dos filtros
+    setupEvolutionChartFilters();
+    
     // Renderizar gráfico de evolução após renderizar a tabela
     setTimeout(() => {
+        if (evolutionChartData) {
+            evolutionChartData.ranking = ranking;
+        }
         renderEvolutionChart(ranking);
     }, 100);
 }
@@ -2325,16 +2334,35 @@ function getScoreClass(score, ranking, champId) {
 // Variáveis para armazenar instâncias dos gráficos
 let evolutionChartInstance = null;
 let participantChartsInstances = {};
+let allEvolutionBets = []; // Armazenar todos os bets para o gráfico
+let evolutionChartData = null; // Armazenar dados processados
 
 // Função para renderizar gráfico de evolução geral
-function renderEvolutionChart(ranking) {
+async function renderEvolutionChart(ranking) {
     const canvas = document.getElementById('evolution-chart');
     const placeholder = document.getElementById('evolution-placeholder');
     
     if (!canvas) return;
     
+    // Buscar todos os bets do Firestore se disponível
+    if (db) {
+        try {
+            const { collection, getDocs } = window.firebaseFunctions;
+            const snapshot = await getDocs(collection(db, 'bets'));
+            allEvolutionBets = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Erro ao carregar palpites para gráfico:', error);
+            allEvolutionBets = bets; // Fallback para bets locais
+        }
+    } else {
+        allEvolutionBets = bets;
+    }
+    
     // Verificar se há dados suficientes (pelo menos 2 jogos finalizados)
-    const finishedGames = games.filter(g => g.status === 'finished').sort((a, b) => {
+    let finishedGames = games.filter(g => g.status === 'finished').sort((a, b) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
         return dateA - dateB;
@@ -2346,6 +2374,43 @@ function renderEvolutionChart(ranking) {
         return;
     }
     
+    // Aplicar filtro de data
+    const dateFilter = document.getElementById('evolution-date-filter')?.value || 'all';
+    const now = new Date();
+    if (dateFilter === 'month') {
+        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        finishedGames = finishedGames.filter(game => {
+            const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
+            return gameDate >= oneMonthAgo;
+        });
+    } else if (dateFilter === 'week') {
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        finishedGames = finishedGames.filter(game => {
+            const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
+            return gameDate >= oneWeekAgo;
+        });
+    }
+    
+    if (finishedGames.length < 2) {
+        canvas.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'block';
+        placeholder.innerHTML = '<p>📊 Não há dados suficientes no período selecionado</p>';
+        return;
+    }
+    
+    // Aplicar filtro por campeonato
+    const selectedChampionships = getSelectedChampionships();
+    if (selectedChampionships.length > 0) {
+        finishedGames = finishedGames.filter(game => selectedChampionships.includes(game.championship));
+    }
+    
+    if (finishedGames.length < 2) {
+        canvas.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'block';
+        placeholder.innerHTML = '<p>📊 Não há dados suficientes com os filtros selecionados</p>';
+        return;
+    }
+    
     if (placeholder) placeholder.style.display = 'none';
     canvas.style.display = 'block';
     
@@ -2354,43 +2419,61 @@ function renderEvolutionChart(ranking) {
         evolutionChartInstance.destroy();
     }
     
-    // Preparar dados de evolução
+    // Preparar dados de evolução para TODOS os participantes
     const labels = [];
     const datasets = [];
     
-    // Criar dataset para cada participante (máximo 10 para não poluir)
-    const topParticipants = ranking.slice(0, 10);
-    
-    topParticipants.forEach((item, index) => {
+    // Usar todos os participantes do ranking, não apenas top 10
+    ranking.forEach((item, index) => {
         const userEvolution = [];
         let cumulativePoints = 0;
         
         finishedGames.forEach(game => {
-            const gameBets = bets.filter(b => b.gameId === game.id && b.userId === item.user.id);
-            if (gameBets.length > 0) {
-                const result = calculatePoints(gameBets[0], game);
+            const gameBet = allEvolutionBets.find(b => b.gameId === game.id && b.userId === item.user.id);
+            if (gameBet) {
+                const result = calculatePoints(gameBet, game);
                 cumulativePoints += result.points;
             }
             userEvolution.push(cumulativePoints);
         });
         
         if (userEvolution.length > 0) {
+            const borderColor = index === 0 ? '#c8102e' : (index === 1 ? '#000000' : getColorForIndex(index));
+            // Converter cor hex para rgba com transparência
+            const hexToRgba = (hex, alpha) => {
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            };
+            
             datasets.push({
                 label: item.user.name,
                 data: userEvolution,
-                borderColor: index === 0 ? '#c8102e' : (index === 1 ? '#000000' : getColorForIndex(index)),
-                backgroundColor: index === 0 ? 'rgba(200, 16, 46, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                borderColor: borderColor,
+                backgroundColor: hexToRgba(borderColor, 0.1),
                 borderWidth: index < 3 ? 3 : 2,
                 tension: 0.4,
-                fill: false
+                fill: false,
+                hidden: false // Inicialmente todas visíveis
             });
         }
     });
     
-    // Criar labels com datas dos jogos
+    // Criar labels com datas dos jogos e armazenar informações dos jogos
+    const gameInfo = []; // Array para armazenar informações de cada jogo (adversário, data completa)
     finishedGames.forEach(game => {
         const gameDate = game.date?.toDate ? game.date.toDate() : new Date(game.date);
         labels.push(gameDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+        gameInfo.push({
+            opponent: game.opponent || 'Adversário',
+            date: gameDate.toLocaleDateString('pt-BR', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric' 
+            }),
+            dateFull: gameDate
+        });
     });
     
     if (labels.length === 0) {
@@ -2398,6 +2481,33 @@ function renderEvolutionChart(ranking) {
         if (placeholder) placeholder.style.display = 'block';
         return;
     }
+    
+    // Calcular valores min/max para eixo Y dinâmico
+    let minY = 0;
+    let maxY = 0;
+    datasets.forEach(dataset => {
+        if (!dataset.hidden) {
+            const datasetMax = Math.max(...dataset.data);
+            const datasetMin = Math.min(...dataset.data);
+            if (datasetMax > maxY) maxY = datasetMax;
+            if (datasetMin < minY) minY = datasetMin;
+        }
+    });
+    
+    // Adicionar margem de 10% acima e abaixo
+    const yRange = maxY - minY;
+    const yPadding = yRange * 0.1 || 1;
+    minY = Math.max(0, minY - yPadding);
+    maxY = maxY + yPadding;
+    
+    // Arredondar para valores mais limpos
+    maxY = Math.ceil(maxY / 5) * 5; // Arredondar para múltiplos de 5
+    
+    // Armazenar dados para uso na legenda e filtros
+    evolutionChartData = { labels, datasets, finishedGames, ranking, gameInfo };
+    
+    // Renderizar legenda customizada
+    renderEvolutionLegend(datasets);
     
     evolutionChartInstance = new Chart(canvas, {
         type: 'line',
@@ -2410,34 +2520,50 @@ function renderEvolutionChart(ranking) {
             maintainAspectRatio: true,
             plugins: {
                 legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        usePointStyle: true,
-                        padding: 15,
-                        font: {
-                            size: 12,
-                            weight: '600'
-                        }
-                    }
+                    display: false // Usar legenda customizada
                 },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    padding: 12,
+                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                    padding: 15,
                     titleFont: {
                         size: 14,
                         weight: 'bold'
                     },
                     bodyFont: {
                         size: 13
+                    },
+                    callbacks: {
+                        title: function(context) {
+                            // Mostrar data e adversário no título
+                            const dataIndex = context[0].dataIndex;
+                            if (evolutionChartData && evolutionChartData.gameInfo && evolutionChartData.gameInfo[dataIndex]) {
+                                const gameInfo = evolutionChartData.gameInfo[dataIndex];
+                                return `${gameInfo.date} - vs ${gameInfo.opponent}`;
+                            }
+                            return context[0].label || '';
+                        },
+                        label: function(context) {
+                            // Mostrar nome do participante e pontos
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y || 0;
+                            return `${label}: ${value.toFixed(1)} pontos`;
+                        },
+                        labelColor: function(context) {
+                            return {
+                                borderColor: context.dataset.borderColor,
+                                backgroundColor: context.dataset.borderColor
+                            };
+                        }
                     }
                 }
             },
             scales: {
                 y: {
                     beginAtZero: true,
+                    min: minY,
+                    max: maxY,
                     grid: {
                         color: 'rgba(0, 0, 0, 0.05)'
                     },
@@ -2446,7 +2572,8 @@ function renderEvolutionChart(ranking) {
                             size: 11,
                             weight: '600'
                         },
-                        color: '#666'
+                        color: '#666',
+                        stepSize: maxY > 20 ? 5 : 2
                     }
                 },
                 x: {
@@ -2473,11 +2600,167 @@ function renderEvolutionChart(ranking) {
     });
 }
 
+// Função para renderizar legenda customizada com interatividade
+function renderEvolutionLegend(datasets) {
+    const legendContainer = document.getElementById('evolution-legend');
+    if (!legendContainer || !evolutionChartData) return;
+    
+    legendContainer.innerHTML = datasets.map((dataset, index) => {
+        const isVisible = !dataset.hidden;
+        const color = dataset.borderColor;
+        return `
+            <div class="legend-item ${isVisible ? 'active' : 'inactive'}" 
+                 data-index="${index}" 
+                 style="border-color: ${color};">
+                <span class="legend-color" style="background-color: ${color};"></span>
+                <span class="legend-label">${dataset.label}</span>
+            </div>
+        `;
+    }).join('');
+    
+    // Adicionar event listeners
+    legendContainer.querySelectorAll('.legend-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const index = parseInt(item.dataset.index);
+            toggleDatasetVisibility(index);
+        });
+    });
+}
+
+// Função para mostrar/esconder dataset
+function toggleDatasetVisibility(index) {
+    if (!evolutionChartInstance || !evolutionChartData) return;
+    
+    const dataset = evolutionChartInstance.data.datasets[index];
+    const meta = evolutionChartInstance.getDatasetMeta(index);
+    
+    // Toggle visibility
+    dataset.hidden = !dataset.hidden;
+    meta.hidden = dataset.hidden;
+    
+    // Atualizar legenda
+    const legendItem = document.querySelector(`#evolution-legend .legend-item[data-index="${index}"]`);
+    if (legendItem) {
+        legendItem.classList.toggle('active', !dataset.hidden);
+        legendItem.classList.toggle('inactive', dataset.hidden);
+    }
+    
+    // Recalcular eixo Y baseado nos dados visíveis
+    let minY = 0;
+    let maxY = 0;
+    evolutionChartInstance.data.datasets.forEach((ds, idx) => {
+        if (!ds.hidden) {
+            const dsMax = Math.max(...ds.data);
+            const dsMin = Math.min(...ds.data);
+            if (dsMax > maxY) maxY = dsMax;
+            if (dsMin < minY) minY = dsMin;
+        }
+    });
+    
+    const yRange = maxY - minY;
+    const yPadding = yRange * 0.1 || 1;
+    minY = Math.max(0, minY - yPadding);
+    maxY = maxY + yPadding;
+    maxY = Math.ceil(maxY / 5) * 5;
+    
+    evolutionChartInstance.options.scales.y.min = minY;
+    evolutionChartInstance.options.scales.y.max = maxY;
+    evolutionChartInstance.options.scales.y.ticks.stepSize = maxY > 20 ? 5 : 2;
+    
+    evolutionChartInstance.update();
+}
+
+// Função para obter campeonatos selecionados
+function getSelectedChampionships() {
+    const checkboxes = document.querySelectorAll('#evolution-championship-filters input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// Função para inicializar filtros de campeonato
+function initializeChampionshipFilters() {
+    const container = document.getElementById('evolution-championship-filters');
+    if (!container) return;
+    
+    // Coletar todos os campeonatos únicos dos jogos finalizados
+    const champIds = new Set();
+    games.filter(g => g.status === 'finished').forEach(game => {
+        if (game.championship) champIds.add(game.championship);
+    });
+    
+    const allChampionships = [...championships];
+    champIds.forEach(champId => {
+        if (!championships.find(c => c.id === champId)) {
+            allChampionships.push({
+                id: champId,
+                name: champId.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ')
+            });
+        }
+    });
+    
+    if (allChampionships.length === 0) {
+        container.innerHTML = '<span style="color: #666; font-size: 0.9em;">Nenhum campeonato disponível</span>';
+        return;
+    }
+    
+    container.innerHTML = allChampionships.map(champ => `
+        <label class="championship-checkbox-label">
+            <input type="checkbox" value="${champ.id}" checked class="championship-checkbox">
+            <span>${champ.name}</span>
+        </label>
+    `).join('');
+    
+    // Adicionar event listeners
+    container.querySelectorAll('.championship-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            if (evolutionChartData && evolutionChartData.ranking) {
+                renderEvolutionChart(evolutionChartData.ranking);
+            }
+        });
+    });
+}
+
+// Função para configurar event listeners dos filtros (chamada após renderizar)
+function setupEvolutionChartFilters() {
+    const dateFilter = document.getElementById('evolution-date-filter');
+    if (dateFilter) {
+        // Remover listener anterior se existir
+        const newDateFilter = dateFilter.cloneNode(true);
+        dateFilter.parentNode.replaceChild(newDateFilter, dateFilter);
+        
+        newDateFilter.addEventListener('change', () => {
+            if (evolutionChartData && evolutionChartData.ranking) {
+                renderEvolutionChart(evolutionChartData.ranking);
+            }
+        });
+    }
+}
+
 // Função para obter cor baseada no índice
 function getColorForIndex(index) {
+    // Cores bem distintas e visuais para cada participante
     const colors = [
-        '#c8102e', '#000000', '#1a1a1a', '#333333', '#4a4a4a',
-        '#666666', '#808080', '#999999', '#b3b3b3', '#cccccc'
+        '#c8102e', // Vermelho Flamengo (primeiro lugar)
+        '#000000', // Preto (segundo lugar)
+        '#0066cc', // Azul
+        '#00aa44', // Verde
+        '#ff6600', // Laranja
+        '#9900cc', // Roxo
+        '#cc0066', // Rosa/Magenta
+        '#00cccc', // Ciano
+        '#ffcc00', // Amarelo
+        '#cc6600', // Marrom
+        '#006699', // Azul escuro
+        '#cc0000', // Vermelho escuro
+        '#009900', // Verde escuro
+        '#6600cc', // Roxo escuro
+        '#cc0099', // Rosa escuro
+        '#00cc99', // Verde-água
+        '#ff9900', // Laranja claro
+        '#6699ff', // Azul claro
+        '#99cc00', // Verde-limão
+        '#ff3399'  // Rosa claro
     ];
     return colors[index % colors.length];
 }
